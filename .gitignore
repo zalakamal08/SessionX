@@ -1,0 +1,7 @@
+target/
+*.class
+*.jar
+!target/sessionx-1.0.jar
+.idea/
+*.iml
+.DS_Store
