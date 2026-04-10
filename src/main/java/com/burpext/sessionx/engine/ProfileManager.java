@@ -100,7 +100,7 @@ public class ProfileManager {
     /**
      * Exports a single profile to a JSON file.
      */
-    public void exportToFile(SessionProfile profile, File file) throws IOException {
+    public void exportToFile(SessionProfile profile, File file) throws Exception {
         String json = JsonUtil.toPrettyJson(profile);
         Files.writeString(file.toPath(), json);
         logger.info("Profile exported: \"" + profile.getName() + "\" -> " + file.getName());
@@ -109,7 +109,7 @@ public class ProfileManager {
     /**
      * Imports a profile from a JSON file and adds it to the list.
      */
-    public SessionProfile importFromFile(File file) throws IOException {
+    public SessionProfile importFromFile(File file) throws Exception {
         String json = Files.readString(file.toPath());
         SessionProfile profile = JsonUtil.fromJson(json, SessionProfile.class);
         profile.setEnabled(false);

@@ -124,9 +124,9 @@ public class SessionEngine implements HttpHandler {
                 }
 
                 case QUERY_PARAM -> {
-                    String currentUrl = request.url();
-                    String separator  = currentUrl.contains("?") ? "&" : "?";
-                    yield request.withUrl(currentUrl + separator + key + "=" + value);
+                    String currentPath = request.path();
+                    String separator   = currentPath.contains("?") ? "&" : "?";
+                    yield request.withPath(currentPath + separator + key + "=" + value);
                 }
             };
         } catch (Exception e) {
