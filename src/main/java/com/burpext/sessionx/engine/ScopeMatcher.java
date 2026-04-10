@@ -11,7 +11,7 @@ import com.burpext.sessionx.core.ScopeRule;
  * Pattern syntax:  '*' matches any sequence of characters.
  * Examples:
  *   *.target.com/api/*  - matches all API paths on any subdomain
- *   */logout            - matches any logout endpoint
+ *   [any]/logout        - matches any logout endpoint
  */
 public class ScopeMatcher {
 

@@ -6,7 +6,7 @@ package com.burpext.sessionx.core;
  *
  * Examples:
  *   *.target.com/api/*   - match all API calls on any subdomain
- *   */logout             - match any logout endpoint
+ *   [any]/logout         - match any logout endpoint
  */
 public class ScopeRule {
 
