@@ -7,8 +7,8 @@ public enum TokenLocation {
     AUTHORIZATION_HEADER("Authorization Header (Bearer)"),
     CUSTOM_HEADER("Custom Header"),
     COOKIE("Cookie"),
-    BODY_JSON("Body — JSON key"),
-    BODY_FORM("Body — Form field"),
+    BODY_JSON("Body - JSON key"),
+    BODY_FORM("Body - Form field"),
     QUERY_PARAM("Query Parameter");
 
     private final String displayName;

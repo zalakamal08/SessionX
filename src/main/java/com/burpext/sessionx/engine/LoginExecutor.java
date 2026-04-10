@@ -17,8 +17,8 @@ import java.util.Map;
  * Steps fire in order using Burp's built-in HTTP client.
  * Tokens extracted from each step's response are stored in TokenStore.
  *
- * Variable substitution: {{stepN:TOKENTYPE}} references in a step's body/headers
- * are replaced with the token value extracted from step N of this run.
+ * Variable substitution: {{stepN:TOKENTYPE}} in a step's body/headers
+ * is replaced with the token value extracted from step N of this run.
  */
 public class LoginExecutor {
 
@@ -32,7 +32,7 @@ public class LoginExecutor {
         this.logger     = logger;
     }
 
-    // ─── Public API ───────────────────────────────────────────────────────────
+    // --- Public API ---
 
     /**
      * Executes all login steps for the given profile.
@@ -45,7 +45,6 @@ public class LoginExecutor {
         List<LoginStep>       steps  = profile.getLoginSteps();
         List<TokenDefinition> tokens = profile.getTokens();
 
-        // stepResponses[i] = raw response body from step i
         Map<Integer, String> stepResponseBodies  = new HashMap<>();
         Map<Integer, String> stepResponseHeaders = new HashMap<>();
         Map<Integer, String> stepResponseCookies = new HashMap<>();
@@ -53,34 +52,32 @@ public class LoginExecutor {
         for (int i = 0; i < steps.size(); i++) {
             LoginStep step = steps.get(i);
             logger.info("Step " + (i + 1) + "/" + steps.size()
-                + " — " + step.getMethod() + " " + step.getUrl()
+                + " - " + step.getMethod() + " " + step.getUrl()
                 + " [" + step.getLabel() + "]");
 
             try {
-                // Resolve {{stepN:TYPE}} variables in body and headers
                 String resolvedBody    = resolveVars(step.getBody(), i, profileId);
                 Map<String,String> resolvedHeaders = resolveHeaderVars(step.getHeaders(), i, profileId);
 
-                // Build the HTTP request
                 HttpRequest request = buildRequest(step.getMethod(), step.getUrl(),
                     resolvedHeaders, resolvedBody);
 
-                // Fire it using Burp's HTTP client (goes through proxy)
                 HttpRequestResponse response = api.http().sendRequest(request);
 
                 int status = response.response().statusCode();
                 logger.info("  -> " + status + " " + response.response().reasonPhrase());
 
-                // Store response parts for token extraction
-                String bodyStr    = response.response().bodyToString();
-                String headerStr  = response.response().toString();
-                String cookieStr  = response.response().headerValue("Set-Cookie");
+                String bodyStr   = response.response().bodyToString();
+                String headerStr = response.response().toString();
+                String cookieStr = response.response().headers().stream()
+                    .filter(h -> h.name().equalsIgnoreCase("Set-Cookie"))
+                    .map(h -> h.value())
+                    .collect(java.util.stream.Collectors.joining("; "));
 
-                stepResponseBodies.put(i, bodyStr != null ? bodyStr : "");
+                stepResponseBodies.put(i, bodyStr   != null ? bodyStr   : "");
                 stepResponseHeaders.put(i, headerStr != null ? headerStr : "");
-                stepResponseCookies.put(i, cookieStr != null ? cookieStr : "");
+                stepResponseCookies.put(i, cookieStr);
 
-                // Extract tokens that come from this step
                 for (TokenDefinition td : tokens) {
                     if (td.getLoginStepIndex() != i) continue;
 
@@ -92,11 +89,10 @@ public class LoginExecutor {
                     String extracted = RegexUtil.extract(source, td.getExtractRegex());
                     if (extracted != null && !extracted.isBlank()) {
                         tokenStore.setToken(profileId, td.getTokenType(), extracted);
-                        logger.token(td.getTokenType() + " extracted"
-                            + " -> " + preview(extracted));
+                        logger.token(td.getTokenType() + " extracted -> " + preview(extracted));
                     } else {
                         logger.warn("Could not extract " + td.getTokenType()
-                            + " from step " + (i + 1) + " — regex: " + td.getExtractRegex());
+                            + " from step " + (i + 1) + " - regex: " + td.getExtractRegex());
                     }
                 }
 
@@ -106,18 +102,17 @@ public class LoginExecutor {
             }
         }
 
-        logger.info("Login sequence complete — token store updated");
+        logger.info("Login sequence complete - token store updated");
         return true;
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+    // --- Helpers ---
 
     private HttpRequest buildRequest(String method, String url,
                                      Map<String, String> headers, String body) {
         HttpRequest req = HttpRequest.httpRequestFromUrl(url);
         req = req.withMethod(method);
 
-        // Set Content-Type default for POST bodies
         if (body != null && !body.isBlank()) {
             if (!headers.containsKey("Content-Type")) {
                 req = req.withHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -125,7 +120,6 @@ public class LoginExecutor {
             req = req.withBody(body);
         }
 
-        // Apply custom headers
         for (Map.Entry<String, String> h : headers.entrySet()) {
             req = req.withHeader(h.getKey(), h.getValue());
         }
@@ -133,9 +127,6 @@ public class LoginExecutor {
         return req;
     }
 
-    /**
-     * Resolves {{stepN:TOKENTYPE}} variables in a string using tokens already extracted.
-     */
     private String resolveVars(String input, int currentStep, String profileId) {
         if (input == null || !input.contains("{{")) return input;
         String result = input;
@@ -167,7 +158,6 @@ public class LoginExecutor {
         };
     }
 
-    /** Returns first 40 chars of a token for safe logging. */
     private String preview(String value) {
         if (value == null) return "(null)";
         return value.length() > 40 ? value.substring(0, 40) + "..." : value;

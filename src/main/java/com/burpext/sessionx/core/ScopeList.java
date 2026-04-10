@@ -12,13 +12,13 @@ public class ScopeList {
     private ScopeMode       mode;
     private List<ScopeRule> rules;
 
-    // ─── Jackson no-arg constructor ───────────────────────────────────────────
+    // Jackson no-arg constructor
     public ScopeList() {
         this.mode  = ScopeMode.WHITELIST;
         this.rules = new ArrayList<>();
     }
 
-    // ─── Getters / Setters ────────────────────────────────────────────────────
+    // Getters / Setters
 
     public ScopeMode getMode()  { return mode; }
     public void      setMode(ScopeMode mode) { this.mode = mode; }
@@ -26,7 +26,7 @@ public class ScopeList {
     public List<ScopeRule> getRules()  { return rules; }
     public void            setRules(List<ScopeRule> rules) { this.rules = rules; }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
+    // Helpers
 
     public void addRule(ScopeRule rule) {
         rules.add(rule);

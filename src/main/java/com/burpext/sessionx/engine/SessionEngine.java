@@ -7,7 +7,7 @@ import com.burpext.sessionx.core.*;
 import com.burpext.sessionx.util.ActivityLogger;
 
 /**
- * Core HTTP handler — registered with Burp's proxy pipeline.
+ * Core HTTP handler - registered with Burp's HTTP pipeline.
  *
  * On every outgoing request:
  *  1. Checks if any enabled profile's scope matches the request URL
@@ -32,12 +32,11 @@ public class SessionEngine implements HttpHandler {
         this.tokenStore        = tokenStore;
         this.logger            = ActivityLogger.getInstance();
 
-        ActivityLogger loggerRef = this.logger;
-        LoginExecutor executor   = new LoginExecutor(api, tokenStore, loggerRef);
-        this.refreshController   = new RefreshController(executor, loggerRef);
+        LoginExecutor executor   = new LoginExecutor(api, tokenStore, this.logger);
+        this.refreshController   = new RefreshController(executor, this.logger);
     }
 
-    // ─── Request interception ─────────────────────────────────────────────────
+    // --- Request interception ---
 
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent requestToBeSent) {
@@ -47,7 +46,7 @@ public class SessionEngine implements HttpHandler {
         for (SessionProfile profile : profileManager.getEnabledProfiles()) {
             // 1. Check scope
             if (!ScopeMatcher.shouldProcess(url, profile.getScope())) {
-                logger.scope("Skipped " + url + " — not in scope for \"" + profile.getName() + "\"");
+                logger.scope("Skipped " + url + " - not in scope for \"" + profile.getName() + "\"");
                 continue;
             }
 
@@ -70,7 +69,7 @@ public class SessionEngine implements HttpHandler {
         return RequestToBeSentAction.continueWith(request);
     }
 
-    // ─── Response inspection ──────────────────────────────────────────────────
+    // --- Response inspection ---
 
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
@@ -92,7 +91,7 @@ public class SessionEngine implements HttpHandler {
         return ResponseReceivedAction.continueWith(responseReceived);
     }
 
-    // ─── Token injection logic ────────────────────────────────────────────────
+    // --- Token injection logic ---
 
     private HttpRequest injectToken(HttpRequest request, TokenDefinition td, String value) {
         String key = td.getInjectKey();

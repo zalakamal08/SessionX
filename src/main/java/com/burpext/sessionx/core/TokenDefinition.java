@@ -4,18 +4,18 @@ package com.burpext.sessionx.core;
  * Defines a single token within a session profile:
  * where to extract it from a login response and where to inject it into requests.
  *
- * loginStepIndex refers to which LoginStep's response to extract the token from (0-based).
+ * loginStepIndex refers to which LoginStep's response to extract from (0-based).
  */
 public class TokenDefinition {
 
     private TokenType     tokenType;
     private ExtractSource extractFrom;
-    private String        extractRegex;     // regex with one capture group: the token value
-    private int           loginStepIndex;   // which login step response to read from
+    private String        extractRegex;
+    private int           loginStepIndex;
     private TokenLocation injectLocation;
-    private String        injectKey;        // header name / cookie name / JSON key / param name
+    private String        injectKey;
 
-    // ─── Jackson no-arg constructor ───────────────────────────────────────────
+    // Jackson no-arg constructor
     public TokenDefinition() {
         this.tokenType      = TokenType.BEARER;
         this.extractFrom    = ExtractSource.RESPONSE_BODY_JSON;
@@ -25,7 +25,7 @@ public class TokenDefinition {
         this.injectKey      = "Authorization";
     }
 
-    // ─── Getters / Setters ────────────────────────────────────────────────────
+    // Getters / Setters
 
     public TokenType     getTokenType()      { return tokenType; }
     public void          setTokenType(TokenType t)   { this.tokenType = t; }

@@ -12,12 +12,12 @@ import java.awt.*;
  *
  * Displays timestamped, color-coded log entries from ActivityLogger.
  * Colors:
- *   [INFO]    → muted grey
- *   [TOKEN]   → green
- *   [REFRESH] → orange
- *   [ERROR]   → red
- *   [SCOPE]   → blue
- *   [WARN]    → yellow/orange
+ *   [INFO]    - muted grey
+ *   [TOKEN]   - green
+ *   [REFRESH] - orange
+ *   [ERROR]   - red
+ *   [SCOPE]   - blue
+ *   [WARN]    - yellow/orange
  */
 public class ActivityLogPanel {
 
@@ -26,7 +26,6 @@ public class ActivityLogPanel {
     private final StyledDocument doc;
 
     public ActivityLogPanel() {
-        // ─── Log text pane ────────────────────────────────────────────────────
         logPane = new JTextPane();
         logPane.setEditable(false);
         logPane.setBackground(UiTheme.BG_DEEP);
@@ -37,7 +36,7 @@ public class ActivityLogPanel {
         scroll.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
         scroll.setBackground(UiTheme.BG_DEEP);
 
-        // ─── Toolbar ──────────────────────────────────────────────────────────
+        // Toolbar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_SM, 4));
         toolbar.setBackground(UiTheme.BG_SURFACE);
         toolbar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
@@ -59,18 +58,17 @@ public class ActivityLogPanel {
         copyBtn.addActionListener(e -> copyAll());
         toolbar.add(copyBtn);
 
-        // ─── Root panel ───────────────────────────────────────────────────────
         root = new JPanel(new BorderLayout(0, 0));
         root.setBackground(UiTheme.BG_DEEP);
         root.setPreferredSize(new Dimension(0, 180));
         root.add(toolbar, BorderLayout.NORTH);
         root.add(scroll, BorderLayout.CENTER);
 
-        // ─── Subscribe to logger ──────────────────────────────────────────────
+        // Subscribe to logger
         ActivityLogger.getInstance().addListener(this::appendEntry);
     }
 
-    // ─── Log entry rendering ──────────────────────────────────────────────────
+    // --- Log entry rendering ---
 
     private void appendEntry(String entry) {
         SwingUtilities.invokeLater(() -> {
@@ -94,10 +92,10 @@ public class ActivityLogPanel {
         if (entry.contains("[ERROR]"))   return UiTheme.ACCENT_RED;
         if (entry.contains("[SCOPE]"))   return UiTheme.ACCENT_BLUE;
         if (entry.contains("[WARN]"))    return new Color(0xD2, 0x99, 0x22);
-        return UiTheme.TEXT_MUTED;   // [INFO]
+        return UiTheme.TEXT_MUTED;
     }
 
-    // ─── Actions ──────────────────────────────────────────────────────────────
+    // --- Actions ---
 
     private void clearLog() {
         try {

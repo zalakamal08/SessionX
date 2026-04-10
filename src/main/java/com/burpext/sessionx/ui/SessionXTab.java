@@ -13,14 +13,9 @@ import java.awt.*;
  * Root panel registered as the "SessionX" Burp Suite tab.
  *
  * Layout:
- *  ┌─────────────────────────────────────────────────────────┐
- *  │  Header bar: brand + version                            │
- *  ├────────────────────┬────────────────────────────────────┤
- *  │  ProfileListPanel  │  ProfileEditorPanel                │
- *  │  (left sidebar)    │  (main area)                       │
- *  ├────────────────────┴────────────────────────────────────┤
- *  │  ActivityLogPanel (always visible at bottom)            │
- *  └─────────────────────────────────────────────────────────┘
+ *  Top:    Header bar with brand label
+ *  Center: Horizontal split - ProfileListPanel (left) | ProfileEditorPanel (right)
+ *  Bottom: ActivityLogPanel (always visible)
  */
 public class SessionXTab {
 
@@ -30,19 +25,19 @@ public class SessionXTab {
         root = new JPanel(new BorderLayout(0, 0));
         root.setBackground(UiTheme.BG_DEEP);
 
-        // ─── Activity log (shared across all panels) ──────────────────────────
+        // Activity log (shared across all panels)
         ActivityLogPanel logPanel = new ActivityLogPanel();
 
-        // ─── Profile editor (right side) ─────────────────────────────────────
+        // Profile editor (right side)
         ProfileEditorPanel editorPanel = new ProfileEditorPanel(api, profileManager, tokenStore);
 
-        // ─── Profile list (left sidebar) ─────────────────────────────────────
+        // Profile list (left sidebar)
         ProfileListPanel listPanel = new ProfileListPanel(profileManager, editorPanel);
 
-        // ─── Header ──────────────────────────────────────────────────────────
+        // Header
         root.add(buildHeader(), BorderLayout.NORTH);
 
-        // ─── Main split: list | editor ────────────────────────────────────────
+        // Main split: list | editor
         JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
             listPanel.getPanel(), editorPanel.getPanel());
         mainSplit.setDividerLocation(230);
@@ -51,7 +46,7 @@ public class SessionXTab {
         mainSplit.setBorder(null);
         mainSplit.setBackground(UiTheme.BG_DEEP);
 
-        // ─── Vertical split: main area | activity log ─────────────────────────
+        // Vertical split: main area | activity log
         JSplitPane vertSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
             mainSplit, logPanel.getPanel());
         vertSplit.setResizeWeight(0.72);
@@ -62,24 +57,23 @@ public class SessionXTab {
         root.add(vertSplit, BorderLayout.CENTER);
 
         // Log startup message
-        ActivityLogger.getInstance().info("SessionX initialized — "
+        ActivityLogger.getInstance().info("SessionX initialized - "
             + profileManager.getAllProfiles().size() + " profile(s) loaded");
     }
 
-    // ─── Header bar ───────────────────────────────────────────────────────────
+    // --- Header bar ---
 
     private JPanel buildHeader() {
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_LG, 8));
         header.setBackground(UiTheme.BG_SURFACE);
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
 
-        // Brand mark
-        JLabel brand = new JLabel("⚡ SessionX");
+        JLabel brand = new JLabel("[ SessionX ]");
         brand.setFont(UiTheme.FONT_HEADING);
         brand.setForeground(UiTheme.ACCENT_GREEN);
         header.add(brand);
 
-        JLabel version = new JLabel("v1.0 — Unified Session Handler for Burp Suite");
+        JLabel version = new JLabel("v1.0  Unified Session Handler for Burp Suite");
         version.setFont(UiTheme.FONT_SMALL);
         version.setForeground(UiTheme.TEXT_MUTED);
         header.add(version);

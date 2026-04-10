@@ -10,8 +10,8 @@ import com.burpext.sessionx.core.ScopeRule;
  *
  * Pattern syntax:  '*' matches any sequence of characters.
  * Examples:
- *   *.target.com/api/*  →  matches all API paths on any subdomain
- *   */logout            →  matches any logout endpoint
+ *   *.target.com/api/*  - matches all API paths on any subdomain
+ *   */logout            - matches any logout endpoint
  */
 public class ScopeMatcher {
 
@@ -20,7 +20,7 @@ public class ScopeMatcher {
      */
     public static boolean shouldProcess(String url, ScopeList scope) {
         if (scope == null || scope.getRules() == null || scope.getRules().isEmpty()) {
-            // No rules configured — process everything by default
+            // No rules configured - process everything by default
             return true;
         }
 

@@ -22,12 +22,10 @@ import java.util.stream.Collectors;
  * Main editor panel for a session profile.
  *
  * Tabs:
- *   1. Tokens         — token extraction + injection definitions
- *   2. Login Sequence — ordered HTTP steps to fire when session expires
- *   3. Scope          — whitelist/blacklist URL pattern rules
- *   4. Error/Refresh  — what triggers a refresh, what URL to exclude
- *
- * Changes are saved immediately on [Save Profile] or when leaving a field.
+ *   1. Tokens         - token extraction + injection definitions
+ *   2. Login Sequence - ordered HTTP steps to fire when session expires
+ *   3. Scope          - whitelist/blacklist URL pattern rules
+ *   4. Error/Refresh  - what triggers a refresh, what URL to exclude
  */
 public class ProfileEditorPanel {
 
@@ -38,23 +36,23 @@ public class ProfileEditorPanel {
 
     private SessionProfile currentProfile;
 
-    // ─── Profile header fields ────────────────────────────────────────────────
+    // Profile header fields
     private JTextField profileNameField;
     private JTextField targetHostField;
     private JToggleButton enabledToggle;
 
-    // ─── Tab: Tokens ──────────────────────────────────────────────────────────
+    // Tab: Tokens
     private DefaultTableModel tokenTableModel;
 
-    // ─── Tab: Login Sequence ──────────────────────────────────────────────────
+    // Tab: Login Sequence
     private DefaultTableModel stepTableModel;
 
-    // ─── Tab: Scope ───────────────────────────────────────────────────────────
+    // Tab: Scope
     private JRadioButton whitelistRadio;
     private JRadioButton blacklistRadio;
     private DefaultTableModel scopeTableModel;
 
-    // ─── Tab: Error / Refresh ─────────────────────────────────────────────────
+    // Tab: Error / Refresh
     private JTextField statusCodesField;
     private JTextField bodyKeywordField;
     private JTextField excludeUrlField;
@@ -70,7 +68,7 @@ public class ProfileEditorPanel {
         showEmptyState();
     }
 
-    // ─── Load profile into editor ─────────────────────────────────────────────
+    // --- Load profile into editor ---
 
     public void loadProfile(SessionProfile profile) {
         this.currentProfile = profile;
@@ -90,21 +88,19 @@ public class ProfileEditorPanel {
         root.revalidate();
     }
 
-    // ─── Profile header (name, host, enable toggle) ───────────────────────────
+    // --- Profile header (name, host, enable toggle) ---
 
     private JPanel buildProfileHeader(SessionProfile profile) {
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_MD, UiTheme.PAD_MD));
         header.setBackground(UiTheme.BG_SURFACE);
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
 
-        // Name
         header.add(UiTheme.label("Name:"));
         profileNameField = UiTheme.textField();
         profileNameField.setText(profile.getName());
         profileNameField.setPreferredSize(new Dimension(180, 28));
         header.add(profileNameField);
 
-        // Host
         header.add(UiTheme.label("Target Host:"));
         targetHostField = UiTheme.textField();
         targetHostField.setText(profile.getTargetHost());
@@ -112,8 +108,7 @@ public class ProfileEditorPanel {
         targetHostField.setPreferredSize(new Dimension(160, 28));
         header.add(targetHostField);
 
-        // Enabled toggle
-        enabledToggle = new JToggleButton(profile.isEnabled() ? "● ACTIVE" : "○ DISABLED",
+        enabledToggle = new JToggleButton(profile.isEnabled() ? "ACTIVE" : "DISABLED",
             profile.isEnabled());
         enabledToggle.setFont(UiTheme.FONT_BOLD);
         enabledToggle.setForeground(profile.isEnabled() ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
@@ -124,7 +119,7 @@ public class ProfileEditorPanel {
         enabledToggle.setFocusPainted(false);
         enabledToggle.addActionListener(e -> {
             boolean on = enabledToggle.isSelected();
-            enabledToggle.setText(on ? "● ACTIVE" : "○ DISABLED");
+            enabledToggle.setText(on ? "ACTIVE" : "DISABLED");
             enabledToggle.setForeground(on ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
         });
         header.add(enabledToggle);
@@ -132,7 +127,7 @@ public class ProfileEditorPanel {
         return header;
     }
 
-    // ─── Tab pane ─────────────────────────────────────────────────────────────
+    // --- Tab pane ---
 
     private JTabbedPane buildTabPane(SessionProfile profile) {
         JTabbedPane tabs = new JTabbedPane();
@@ -140,15 +135,15 @@ public class ProfileEditorPanel {
         tabs.setForeground(UiTheme.TEXT_PRIMARY);
         tabs.setFont(UiTheme.FONT_NORMAL);
 
-        tabs.addTab("🔑  Tokens",         buildTokensTab(profile));
-        tabs.addTab("⚡  Login Sequence",  buildLoginSequenceTab(profile));
-        tabs.addTab("🎯  Scope",           buildScopeTab(profile));
-        tabs.addTab("⚠   Error / Refresh", buildErrorRefreshTab(profile));
+        tabs.addTab("[1] Tokens",          buildTokensTab(profile));
+        tabs.addTab("[2] Login Sequence",  buildLoginSequenceTab(profile));
+        tabs.addTab("[3] Scope",           buildScopeTab(profile));
+        tabs.addTab("[4] Error / Refresh", buildErrorRefreshTab(profile));
 
         return tabs;
     }
 
-    // ─── Tab 1: Tokens ────────────────────────────────────────────────────────
+    // --- Tab 1: Tokens ---
 
     private JPanel buildTokensTab(SessionProfile profile) {
         JPanel panel = darkPanel();
@@ -156,17 +151,15 @@ public class ProfileEditorPanel {
         panel.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_LG, UiTheme.PAD_MD, UiTheme.PAD_LG));
 
         JLabel hint = UiTheme.mutedLabel(
-            "Each row defines one token: where to extract it from a login response, and where to inject it into requests.");
+            "Each row: where to extract a token from a login response, and where to inject it into requests.");
         hint.setBorder(new EmptyBorder(0, 0, UiTheme.PAD_SM, 0));
         panel.add(hint, BorderLayout.NORTH);
 
-        // Table columns
         String[] cols = {"Type", "Extract From", "Regex (1 capture group)", "Step #", "Inject At", "Key / Header Name"};
         tokenTableModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int row, int col) { return true; }
         };
 
-        // Populate
         for (TokenDefinition td : profile.getTokens()) {
             tokenTableModel.addRow(new Object[]{
                 td.getTokenType(), td.getExtractFrom(), td.getExtractRegex(),
@@ -175,16 +168,11 @@ public class ProfileEditorPanel {
         }
 
         JTable table = styledTable(tokenTableModel);
-
-        // Dropdowns for type/extract/inject columns
         setComboEditor(table, 0, TokenType.values());
         setComboEditor(table, 1, ExtractSource.values());
         setComboEditor(table, 4, TokenLocation.values());
-
-        // Monospace for regex column
         table.getColumnModel().getColumn(2).setCellRenderer(new MonoRenderer());
 
-        // Column widths
         int[] widths = {130, 160, 220, 55, 165, 140};
         for (int i = 0; i < widths.length; i++)
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
@@ -195,7 +183,7 @@ public class ProfileEditorPanel {
         return panel;
     }
 
-    // ─── Tab 2: Login Sequence ────────────────────────────────────────────────
+    // --- Tab 2: Login Sequence ---
 
     private JPanel buildLoginSequenceTab(SessionProfile profile) {
         JPanel panel = darkPanel();
@@ -221,8 +209,6 @@ public class ProfileEditorPanel {
 
         JTable table = styledTable(stepTableModel);
         setComboEditor(table, 1, new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"});
-
-        // Monospace for URL and body
         table.getColumnModel().getColumn(2).setCellRenderer(new MonoRenderer());
         table.getColumnModel().getColumn(3).setCellRenderer(new MonoRenderer());
 
@@ -236,20 +222,19 @@ public class ProfileEditorPanel {
         return panel;
     }
 
-    // ─── Tab 3: Scope ─────────────────────────────────────────────────────────
+    // --- Tab 3: Scope ---
 
     private JPanel buildScopeTab(SessionProfile profile) {
         JPanel panel = darkPanel();
         panel.setLayout(new BorderLayout(0, 0));
         panel.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_LG, UiTheme.PAD_MD, UiTheme.PAD_LG));
 
-        // Mode selector
         JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_SM, 0));
         modePanel.setBackground(UiTheme.BG_SURFACE);
         modePanel.setBorder(new EmptyBorder(0, 0, UiTheme.PAD_MD, 0));
 
-        whitelistRadio = new JRadioButton("Whitelist — only process matching URLs");
-        blacklistRadio = new JRadioButton("Blacklist — skip matching URLs");
+        whitelistRadio = new JRadioButton("Whitelist - only process matching URLs");
+        blacklistRadio = new JRadioButton("Blacklist - skip matching URLs");
         styleRadio(whitelistRadio);
         styleRadio(blacklistRadio);
 
@@ -264,13 +249,10 @@ public class ProfileEditorPanel {
         modePanel.add(UiTheme.label("Mode:"));
         modePanel.add(whitelistRadio);
         modePanel.add(blacklistRadio);
-
-        JLabel scopeHint = UiTheme.mutedLabel("  Use * as wildcard.  Example: *.example.com/api/*");
-        modePanel.add(scopeHint);
+        modePanel.add(UiTheme.mutedLabel("  Wildcard: *.example.com/api/*"));
 
         panel.add(modePanel, BorderLayout.NORTH);
 
-        // Scope table
         String[] cols = {"URL Pattern", "Enabled", "Comment"};
         scopeTableModel = new DefaultTableModel(cols, 0) {
             @Override public Class<?> getColumnClass(int col) {
@@ -295,7 +277,7 @@ public class ProfileEditorPanel {
         return panel;
     }
 
-    // ─── Tab 4: Error / Refresh ───────────────────────────────────────────────
+    // --- Tab 4: Error / Refresh ---
 
     private JPanel buildErrorRefreshTab(SessionProfile profile) {
         JPanel panel = darkPanel();
@@ -308,7 +290,6 @@ public class ProfileEditorPanel {
 
         ErrorCondition ec = profile.getErrorCondition();
 
-        // Section: Trigger condition
         addSectionTitle(panel, gbc, 0, "TRIGGER CONDITION");
         addFormRow(panel, gbc, 1, "Trigger refresh when status code is:",
             statusCodesField = UiTheme.textField(),
@@ -323,59 +304,56 @@ public class ProfileEditorPanel {
             "Only trigger if response body contains this text");
         bodyKeywordField.setText(ec.getTriggerOnBodyKeyword());
 
-        // Spacer
         gbc.gridy = 3; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 0.05;
         panel.add(new JLabel(), gbc);
         gbc.weighty = 0; gbc.gridwidth = 1;
 
-        // Section: Refresh exclusion
         addSectionTitle(panel, gbc, 4, "REFRESH EXCLUSION");
         addFormRow(panel, gbc, 5, "Skip token injection for requests to URL:",
             excludeUrlField = UiTheme.monoField(),
-            "Prevents infinite loop — enter your login/token endpoint here, e.g. /auth/login");
+            "Prevents infinite loop - enter your login/token endpoint here");
         excludeUrlField.setText(ec.getRefreshExcludeUrl());
 
-        // Push everything to top
         gbc.gridy = 6; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1.0;
         panel.add(new JLabel(), gbc);
 
         return panel;
     }
 
-    // ─── Action bar (Save, Delete, Export, Import) ────────────────────────────
+    // --- Action bar ---
 
     private JPanel buildActionBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_SM, UiTheme.PAD_SM));
         bar.setBackground(UiTheme.BG_SURFACE);
         bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
 
-        JButton saveBtn = UiTheme.primaryButton("💾  Save");
+        JButton saveBtn = UiTheme.primaryButton("Save Profile");
         saveBtn.addActionListener(e -> saveCurrentProfile());
         bar.add(saveBtn);
 
-        JButton runBtn = UiTheme.button("▶  Run Login Now");
+        JButton runBtn = UiTheme.button("Run Login Now");
         runBtn.setToolTipText("Manually trigger the login sequence to populate tokens");
         runBtn.addActionListener(e -> runLoginNow());
         bar.add(runBtn);
 
-        JButton exportBtn = UiTheme.button("⬆  Export JSON");
+        JButton exportBtn = UiTheme.button("Export JSON");
         exportBtn.addActionListener(e -> exportProfile());
         bar.add(exportBtn);
 
-        JButton importBtn = UiTheme.button("⬇  Import JSON");
+        JButton importBtn = UiTheme.button("Import JSON");
         importBtn.addActionListener(e -> importProfile());
         bar.add(importBtn);
 
         bar.add(Box.createHorizontalGlue());
 
-        JButton deleteBtn = UiTheme.dangerButton("🗑  Delete Profile");
+        JButton deleteBtn = UiTheme.dangerButton("Delete Profile");
         deleteBtn.addActionListener(e -> deleteCurrentProfile());
         bar.add(deleteBtn);
 
         return bar;
     }
 
-    // ─── Save logic ───────────────────────────────────────────────────────────
+    // --- Save logic ---
 
     private void saveCurrentProfile() {
         if (currentProfile == null) return;
@@ -384,21 +362,21 @@ public class ProfileEditorPanel {
         currentProfile.setTargetHost(targetHostField.getText().trim());
         currentProfile.setEnabled(enabledToggle.isSelected());
 
-        // Read tokens
         List<TokenDefinition> tokens = new ArrayList<>();
         for (int i = 0; i < tokenTableModel.getRowCount(); i++) {
             TokenDefinition td = new TokenDefinition();
             td.setTokenType((TokenType) tokenTableModel.getValueAt(i, 0));
             td.setExtractFrom((ExtractSource) tokenTableModel.getValueAt(i, 1));
             td.setExtractRegex(str(tokenTableModel.getValueAt(i, 2)));
-            td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 3))));
+            try {
+                td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 3))));
+            } catch (NumberFormatException ignored) {}
             td.setInjectLocation((TokenLocation) tokenTableModel.getValueAt(i, 4));
             td.setInjectKey(str(tokenTableModel.getValueAt(i, 5)));
             tokens.add(td);
         }
         currentProfile.setTokens(tokens);
 
-        // Read login steps
         List<LoginStep> steps = new ArrayList<>();
         for (int i = 0; i < stepTableModel.getRowCount(); i++) {
             LoginStep step = new LoginStep();
@@ -412,7 +390,6 @@ public class ProfileEditorPanel {
         }
         currentProfile.setLoginSteps(steps);
 
-        // Read scope
         ScopeList scope = new ScopeList();
         scope.setMode(whitelistRadio.isSelected() ? ScopeMode.WHITELIST : ScopeMode.BLACKLIST);
         List<ScopeRule> rules = new ArrayList<>();
@@ -426,7 +403,6 @@ public class ProfileEditorPanel {
         scope.setRules(rules);
         currentProfile.setScope(scope);
 
-        // Read error condition
         ErrorCondition ec = new ErrorCondition();
         String codes = statusCodesField.getText().trim();
         if (!codes.isBlank()) {
@@ -500,7 +476,7 @@ public class ProfileEditorPanel {
         }
     }
 
-    // ─── UI Helpers ───────────────────────────────────────────────────────────
+    // --- UI Helpers ---
 
     private JPanel darkPanel() {
         JPanel p = new JPanel();
@@ -588,7 +564,7 @@ public class ProfileEditorPanel {
         return val == null ? "" : val.toString();
     }
 
-    // ─── Inner: Monospace cell renderer ──────────────────────────────────────
+    // --- Inner: Monospace cell renderer ---
 
     private static class MonoRenderer extends DefaultTableCellRenderer {
         MonoRenderer() {

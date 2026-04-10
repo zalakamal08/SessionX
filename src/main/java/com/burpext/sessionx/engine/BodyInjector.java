@@ -24,17 +24,17 @@ import java.util.Map;
  * Supports:
  *  - JSON bodies    (parsed with Jackson, key-based replacement)
  *  - XML bodies     (parsed with javax.xml DOM, element text replacement)
- *  - Form-encoded   (URL-decoded key=value&key2=value2 strings)
+ *  - Form-encoded   (URL-decoded key=value pairs)
  */
 public class BodyInjector {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    // ─── JSON ─────────────────────────────────────────────────────────────────
+    // --- JSON ---
 
     /**
      * Sets a key to a value in a JSON body string.
-     * Supports nested keys using dot notation: "data.token".
+     * Supports dot notation for nested keys: "data.token"
      * Returns the modified JSON string, or the original if parsing fails.
      */
     public static String injectJson(String body, String key, String value) {
@@ -45,23 +45,20 @@ public class BodyInjector {
 
             String[] parts = key.split("\\.", 2);
             if (parts.length == 2 && root.has(parts[0]) && root.get(parts[0]).isObject()) {
-                // Nested key
                 ((ObjectNode) root.get(parts[0])).put(parts[1], value);
             } else {
-                // Top-level key
                 ((ObjectNode) root).put(key, value);
             }
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
-            return body; // Return unchanged on parse error
+            return body;
         }
     }
 
-    // ─── Form-encoded ─────────────────────────────────────────────────────────
+    // --- Form-encoded ---
 
     /**
      * Replaces or adds a key=value pair in a URL-encoded form body.
-     * Returns the modified form string.
      */
     public static String injectForm(String body, String key, String value) {
         if (body == null) return body;
@@ -93,7 +90,7 @@ public class BodyInjector {
         return sb.toString();
     }
 
-    // ─── XML ──────────────────────────────────────────────────────────────────
+    // --- XML ---
 
     /**
      * Replaces the text content of the first matching element in an XML body.
@@ -118,7 +115,7 @@ public class BodyInjector {
             transformer.transform(new DOMSource(doc), new StreamResult(writer));
             return writer.toString();
         } catch (Exception e) {
-            return body; // Return unchanged on parse error
+            return body;
         }
     }
 }

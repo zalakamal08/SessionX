@@ -2,8 +2,8 @@ package com.burpext.sessionx.core;
 
 /**
  * Scope list operating mode.
- * WHITELIST — extension only acts on URLs matching a rule.
- * BLACKLIST — extension acts on everything EXCEPT URLs matching a rule.
+ * WHITELIST - extension only acts on URLs matching a rule.
+ * BLACKLIST - extension acts on everything EXCEPT URLs matching a rule.
  */
 public enum ScopeMode {
     WHITELIST("Whitelist (only process matching URLs)"),

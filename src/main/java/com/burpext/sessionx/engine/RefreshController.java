@@ -6,14 +6,15 @@ import com.burpext.sessionx.util.ActivityLogger;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * Guards against refresh loops and concurrent refresh storms.
  *
  * When a 401/403 triggers a refresh, this controller:
- *  1. Checks the 5-second cooldown — ignores duplicate triggers
- *  2. Runs the LoginExecutor on a background thread (doesn't block proxy)
+ *  1. Checks the 5-second cooldown - ignores duplicate triggers
+ *  2. Runs the LoginExecutor on a background thread (does not block proxy)
  *  3. Updates the last-refresh timestamp per profile
  */
 public class RefreshController {
@@ -23,10 +24,13 @@ public class RefreshController {
     private final LoginExecutor loginExecutor;
     private final ActivityLogger logger;
 
-    // profileId → last refresh attempt timestamp
+    // Shared executor - avoids creating a new thread pool on every refresh
+    private final ExecutorService executor = Executors.newCachedThreadPool();
+
+    // profileId -> last refresh attempt timestamp
     private final Map<String, Instant> lastRefresh = new ConcurrentHashMap<>();
 
-    // profileId → currently refreshing flag
+    // profileId -> currently refreshing flag
     private final Map<String, Boolean> inProgress = new ConcurrentHashMap<>();
 
     public RefreshController(LoginExecutor loginExecutor, ActivityLogger logger) {
@@ -34,7 +38,7 @@ public class RefreshController {
         this.logger        = logger;
     }
 
-    // ─── Public API ───────────────────────────────────────────────────────────
+    // --- Public API ---
 
     /**
      * Triggers a login re-execution for the given profile, subject to cooldown.
@@ -46,16 +50,16 @@ public class RefreshController {
     public void triggerRefresh(SessionProfile profile, String trigger) {
         String profileId = profile.getId();
 
-        // Cooldown guard — don't re-fire within 5 seconds of last attempt
+        // Cooldown guard - do not re-fire within 5 seconds of last attempt
         Instant last = lastRefresh.get(profileId);
         if (last != null && Instant.now().toEpochMilli() - last.toEpochMilli() < COOLDOWN_MS) {
-            logger.warn("Refresh skipped (cooldown active) — " + trigger);
+            logger.warn("Refresh skipped (cooldown active) - " + trigger);
             return;
         }
 
-        // In-progress guard — don't fire twice simultaneously
+        // In-progress guard - do not fire twice simultaneously
         if (Boolean.TRUE.equals(inProgress.get(profileId))) {
-            logger.warn("Refresh skipped (already in progress) — " + trigger);
+            logger.warn("Refresh skipped (already in progress) - " + trigger);
             return;
         }
 
@@ -63,11 +67,11 @@ public class RefreshController {
         inProgress.put(profileId, true);
         lastRefresh.put(profileId, Instant.now());
 
-        logger.refresh("Session expired — " + trigger + " — re-running login for \""
+        logger.refresh("Session expired - " + trigger + " - re-running login for \""
             + profile.getName() + "\"");
 
-        // Run asynchronously so we don't block Burp's proxy thread
-        Executors.newSingleThreadExecutor().submit(() -> {
+        // Run asynchronously so we do not block Burp's proxy thread
+        executor.submit(() -> {
             try {
                 loginExecutor.execute(profile);
             } catch (Exception e) {

@@ -11,12 +11,8 @@ import java.util.List;
 /**
  * Left sidebar showing the list of session profiles.
  *
- * Each profile is shown as a card with:
- *   - Status LED (green = active, grey = disabled)
- *   - Profile name
- *   - Target host label
- *
- * Clicking a card loads it in the ProfileEditorPanel.
+ * Each profile is shown as a card with status LED, name, and target host.
+ * Clicking a card loads it in ProfileEditorPanel.
  * "New Profile" button at the bottom creates a blank profile.
  */
 public class ProfileListPanel {
@@ -30,14 +26,13 @@ public class ProfileListPanel {
         this.profileManager = profileManager;
         this.editorPanel    = editorPanel;
 
-        // ─── Container ────────────────────────────────────────────────────────
         root = new JPanel(new BorderLayout(0, 0));
         root.setBackground(UiTheme.BG_SURFACE);
         root.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, UiTheme.BORDER));
         root.setMinimumSize(new Dimension(190, 0));
         root.setPreferredSize(new Dimension(220, 0));
 
-        // ─── Header ──────────────────────────────────────────────────────────
+        // Header
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(UiTheme.BG_SURFACE);
         header.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_MD, UiTheme.PAD_SM, UiTheme.PAD_MD));
@@ -49,7 +44,7 @@ public class ProfileListPanel {
 
         root.add(header, BorderLayout.NORTH);
 
-        // ─── Scrollable profile list ──────────────────────────────────────────
+        // Scrollable profile list
         listContainer = new JPanel();
         listContainer.setLayout(new BoxLayout(listContainer, BoxLayout.Y_AXIS));
         listContainer.setBackground(UiTheme.BG_SURFACE);
@@ -60,7 +55,7 @@ public class ProfileListPanel {
         scroll.getViewport().setBackground(UiTheme.BG_SURFACE);
         root.add(scroll, BorderLayout.CENTER);
 
-        // ─── Footer: New Profile button ───────────────────────────────────────
+        // Footer: New Profile button
         JPanel footer = new JPanel(new BorderLayout());
         footer.setBackground(UiTheme.BG_SURFACE);
         footer.setBorder(new EmptyBorder(UiTheme.PAD_SM, UiTheme.PAD_SM, UiTheme.PAD_SM, UiTheme.PAD_SM));
@@ -72,11 +67,10 @@ public class ProfileListPanel {
 
         root.add(footer, BorderLayout.SOUTH);
 
-        // ─── Populate ─────────────────────────────────────────────────────────
         refresh();
     }
 
-    // ─── Refresh the profile list ─────────────────────────────────────────────
+    // --- Refresh the profile list ---
 
     public void refresh() {
         listContainer.removeAll();
@@ -96,7 +90,7 @@ public class ProfileListPanel {
         listContainer.repaint();
     }
 
-    // ─── Profile card ─────────────────────────────────────────────────────────
+    // --- Profile card ---
 
     private JPanel buildProfileCard(SessionProfile profile) {
         JPanel card = new JPanel(new BorderLayout(UiTheme.PAD_SM, 0));
@@ -107,8 +101,8 @@ public class ProfileListPanel {
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        // Status LED
-        JLabel led = new JLabel("●");
+        // Status LED (circle indicator)
+        JLabel led = new JLabel(profile.isEnabled() ? "( * )" : "(   )");
         led.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         led.setForeground(profile.isEnabled() ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
         card.add(led, BorderLayout.WEST);
@@ -128,7 +122,7 @@ public class ProfileListPanel {
         textBlock.add(hostLabel);
         card.add(textBlock, BorderLayout.CENTER);
 
-        // Click handler — load in editor
+        // Click handler - load in editor
         card.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
@@ -138,9 +132,10 @@ public class ProfileListPanel {
 
             @Override
             public void mouseEntered(java.awt.event.MouseEvent e) {
-                if (!card.getBackground().equals(UiTheme.BG_ELEVATED))
+                if (!card.getBackground().equals(UiTheme.BG_ELEVATED)) {
                     card.setBackground(new Color(0x1C, 0x22, 0x2A));
-                textBlock.setBackground(card.getBackground());
+                    textBlock.setBackground(card.getBackground());
+                }
             }
 
             @Override
@@ -170,7 +165,7 @@ public class ProfileListPanel {
         }
     }
 
-    // ─── Actions ──────────────────────────────────────────────────────────────
+    // --- Actions ---
 
     private void createNewProfile() {
         SessionProfile profile = new SessionProfile();

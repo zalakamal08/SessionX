@@ -34,7 +34,7 @@ public class ProfileManager {
         loadFromPrefs();
     }
 
-    // ─── CRUD ─────────────────────────────────────────────────────────────────
+    // --- CRUD ---
 
     public void addProfile(SessionProfile profile) {
         profiles.add(profile);
@@ -72,7 +72,7 @@ public class ProfileManager {
         return profiles.stream().filter(SessionProfile::isEnabled).toList();
     }
 
-    // ─── Persistence ──────────────────────────────────────────────────────────
+    // --- Persistence ---
 
     private void saveToPrefs() {
         try {
@@ -95,7 +95,7 @@ public class ProfileManager {
         }
     }
 
-    // ─── Import / Export ──────────────────────────────────────────────────────
+    // --- Import / Export ---
 
     /**
      * Exports a single profile to a JSON file.
@@ -107,14 +107,11 @@ public class ProfileManager {
     }
 
     /**
-     * Imports a profile from a JSON file.
-     * The imported profile is added to the profile list.
+     * Imports a profile from a JSON file and adds it to the list.
      */
     public SessionProfile importFromFile(File file) throws IOException {
         String json = Files.readString(file.toPath());
         SessionProfile profile = JsonUtil.fromJson(json, SessionProfile.class);
-        // Give it a fresh ID to avoid collisions if same file is imported twice
-        // We keep the name as-is but mark it disabled until user enables it
         profile.setEnabled(false);
         addProfile(profile);
         logger.info("Profile imported: \"" + profile.getName() + "\" from " + file.getName());

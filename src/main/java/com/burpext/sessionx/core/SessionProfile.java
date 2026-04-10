@@ -21,7 +21,7 @@ public class SessionProfile {
 
     private String         id;
     private String         name;
-    private String         targetHost;       // display label only (e.g. "api.target.com")
+    private String         targetHost;
     private boolean        enabled;
 
     private List<LoginStep>        loginSteps;
@@ -31,7 +31,7 @@ public class SessionProfile {
 
     private Instant createdAt;
 
-    // ─── Jackson no-arg constructor ───────────────────────────────────────────
+    // Jackson no-arg constructor
     public SessionProfile() {
         this.id             = UUID.randomUUID().toString();
         this.name           = "New Profile";
@@ -44,7 +44,7 @@ public class SessionProfile {
         this.createdAt      = Instant.now();
     }
 
-    // ─── Getters / Setters ────────────────────────────────────────────────────
+    // Getters / Setters
 
     public String         getId()             { return id; }
     public void           setId(String id)    { this.id = id; }
@@ -73,10 +73,8 @@ public class SessionProfile {
     public Instant               getCreatedAt()      { return createdAt; }
     public void                  setCreatedAt(Instant i) { this.createdAt = i; }
 
-    // ─── Helper ──────────────────────────────────────────────────────────────
-
     @Override
     public String toString() {
-        return name + (enabled ? " ●" : " ○");
+        return name + (enabled ? " [ACTIVE]" : " [DISABLED]");
     }
 }

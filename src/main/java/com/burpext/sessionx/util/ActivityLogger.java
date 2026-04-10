@@ -13,11 +13,11 @@ import java.util.function.Consumer;
  * to receive new entries and append them to the ActivityLogPanel.
  *
  * Log prefixes:
- *   [INFO]     → grey    — general lifecycle events
- *   [TOKEN]    → green   — token extracted / injected
- *   [REFRESH]  → orange  — session expired, login re-executed
- *   [ERROR]    → red     — failures or exceptions
- *   [SCOPE]    → blue    — URL skipped due to scope rules
+ *   [INFO]    - grey    - general lifecycle events
+ *   [TOKEN]   - green   - token extracted / injected
+ *   [REFRESH] - orange  - session expired, login re-executed
+ *   [ERROR]   - red     - failures or exceptions
+ *   [SCOPE]   - blue    - URL skipped due to scope rules
  */
 public class ActivityLogger {
 
@@ -30,7 +30,7 @@ public class ActivityLogger {
 
     public static ActivityLogger getInstance() { return INSTANCE; }
 
-    // ─── Log methods ──────────────────────────────────────────────────────────
+    // --- Log methods ---
 
     public void info(String msg)    { log("[INFO]    ", msg); }
     public void token(String msg)   { log("[TOKEN]   ", msg); }
@@ -39,7 +39,7 @@ public class ActivityLogger {
     public void warn(String msg)    { log("[WARN]    ", msg); }
     public void scope(String msg)   { log("[SCOPE]   ", msg); }
 
-    // ─── Listener interface (UI subscribes here) ──────────────────────────────
+    // --- Listener interface (UI subscribes here) ---
 
     public void addListener(Consumer<String> listener) {
         listeners.add(listener);
@@ -49,7 +49,7 @@ public class ActivityLogger {
         listeners.remove(listener);
     }
 
-    // ─── Internal ─────────────────────────────────────────────────────────────
+    // --- Internal ---
 
     private void log(String prefix, String msg) {
         String entry = "[" + LocalTime.now().format(FMT) + "] " + prefix + msg;

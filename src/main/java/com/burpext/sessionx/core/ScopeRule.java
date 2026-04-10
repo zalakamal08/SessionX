@@ -5,8 +5,8 @@ package com.burpext.sessionx.core;
  * Supports '*' as a wildcard matching any characters.
  *
  * Examples:
- *   *.target.com/api/*   → match all API calls on any subdomain
- *   */logout             → match any logout endpoint
+ *   *.target.com/api/*   - match all API calls on any subdomain
+ *   */logout             - match any logout endpoint
  */
 public class ScopeRule {
 
@@ -14,7 +14,7 @@ public class ScopeRule {
     private boolean enabled;
     private String  comment;
 
-    // ─── Jackson no-arg constructor ───────────────────────────────────────────
+    // Jackson no-arg constructor
     public ScopeRule() {
         this.enabled = true;
         this.comment = "";
@@ -26,7 +26,7 @@ public class ScopeRule {
         this.comment = comment;
     }
 
-    // ─── Getters / Setters ────────────────────────────────────────────────────
+    // Getters / Setters
 
     public String getPattern()  { return pattern; }
     public void   setPattern(String pattern)   { this.pattern = pattern; }

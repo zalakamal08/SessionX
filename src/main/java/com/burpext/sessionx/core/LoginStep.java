@@ -12,13 +12,13 @@ import java.util.Map;
  */
 public class LoginStep {
 
-    private String              method;     // GET, POST, PUT, PATCH, DELETE
+    private String              method;
     private String              url;
     private Map<String, String> headers;
     private String              body;
-    private String              label;      // display name e.g. "Get CSRF Token"
+    private String              label;
 
-    // ─── Jackson no-arg constructor ───────────────────────────────────────────
+    // Jackson no-arg constructor
     public LoginStep() {
         this.method  = "POST";
         this.url     = "";
@@ -27,7 +27,7 @@ public class LoginStep {
         this.label   = "Login Step";
     }
 
-    // ─── Getters / Setters ────────────────────────────────────────────────────
+    // Getters / Setters
 
     public String              getMethod()  { return method; }
     public void                setMethod(String m)   { this.method = m; }
