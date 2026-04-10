@@ -9,6 +9,7 @@ import burp.api.montoya.MontoyaApi;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.*;
 import java.awt.*;
@@ -19,13 +20,20 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Main editor panel for a session profile.
+ * Profile editor panel — shown on the right side when a profile is selected.
+ *
+ * Design intent:
+ *   - Tab strip at the top, minimal tab styling
+ *   - Each tab uses consistent form layout: left labels (fixed width) + right fields
+ *   - Tables are borderless with zebra rows
+ *   - Action bar pinned to bottom, primary action leftmost
+ *   - Empty state: plain centered message, no graphics
  *
  * Tabs:
- *   1. Tokens         - token extraction + injection definitions
- *   2. Login Sequence - ordered HTTP steps to fire when session expires
- *   3. Scope          - whitelist/blacklist URL pattern rules
- *   4. Error/Refresh  - what triggers a refresh, what URL to exclude
+ *   1. Tokens         - extraction regex + injection location per token type
+ *   2. Login Sequence - ordered HTTP steps
+ *   3. Scope          - URL whitelist/blacklist patterns
+ *   4. Error / Refresh - trigger conditions
  */
 public class ProfileEditorPanel {
 
@@ -36,23 +44,23 @@ public class ProfileEditorPanel {
 
     private SessionProfile currentProfile;
 
-    // Profile header fields
-    private JTextField profileNameField;
-    private JTextField targetHostField;
+    // Header controls
+    private JTextField   profileNameField;
+    private JTextField   targetHostField;
     private JToggleButton enabledToggle;
 
-    // Tab: Tokens
+    // Tab 1: Tokens
     private DefaultTableModel tokenTableModel;
 
-    // Tab: Login Sequence
+    // Tab 2: Login Sequence
     private DefaultTableModel stepTableModel;
 
-    // Tab: Scope
+    // Tab 3: Scope
     private JRadioButton whitelistRadio;
     private JRadioButton blacklistRadio;
     private DefaultTableModel scopeTableModel;
 
-    // Tab: Error / Refresh
+    // Tab 4: Error / Refresh
     private JTextField statusCodesField;
     private JTextField bodyKeywordField;
     private JTextField excludeUrlField;
@@ -63,101 +71,128 @@ public class ProfileEditorPanel {
         this.tokenStore     = tokenStore;
 
         root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(UiTheme.BG_SURFACE);
-
+        root.setBackground(UiTheme.BG_PANEL);
         showEmptyState();
     }
 
-    // --- Load profile into editor ---
+    // --- State ---
 
     public void loadProfile(SessionProfile profile) {
         this.currentProfile = profile;
         root.removeAll();
         root.add(buildProfileHeader(profile), BorderLayout.NORTH);
-        root.add(buildTabPane(profile), BorderLayout.CENTER);
-        root.add(buildActionBar(), BorderLayout.SOUTH);
+        root.add(buildTabs(profile),          BorderLayout.CENTER);
+        root.add(buildActionBar(),            BorderLayout.SOUTH);
         root.revalidate();
         root.repaint();
     }
 
     private void showEmptyState() {
         root.removeAll();
-        JLabel hint = UiTheme.mutedLabel("Select a profile from the left, or create a new one.");
-        hint.setHorizontalAlignment(SwingConstants.CENTER);
-        root.add(hint, BorderLayout.CENTER);
+        JPanel center = new JPanel(new GridBagLayout());
+        center.setBackground(UiTheme.BG_PANEL);
+        JLabel hint = UiTheme.mutedLabel("Select a profile or create a new one");
+        center.add(hint);
+        root.add(center, BorderLayout.CENTER);
         root.revalidate();
     }
 
-    // --- Profile header (name, host, enable toggle) ---
+    // =========================================================================
+    // PROFILE HEADER
+    // =========================================================================
 
     private JPanel buildProfileHeader(SessionProfile profile) {
-        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_MD, UiTheme.PAD_MD));
-        header.setBackground(UiTheme.BG_SURFACE);
-        header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, UiTheme.SP_SM));
+        bar.setBackground(UiTheme.BG_PANEL);
+        bar.setBorder(new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE));
 
-        header.add(UiTheme.label("Name:"));
-        profileNameField = UiTheme.textField();
-        profileNameField.setText(profile.getName());
-        profileNameField.setPreferredSize(new Dimension(180, 28));
-        header.add(profileNameField);
+        // Name field
+        bar.add(smallLabel("Name"));
+        profileNameField = compactField(profile.getName(), 180);
+        bar.add(profileNameField);
 
-        header.add(UiTheme.label("Target Host:"));
-        targetHostField = UiTheme.textField();
-        targetHostField.setText(profile.getTargetHost());
-        targetHostField.setToolTipText("Display label only, e.g. api.target.com");
-        targetHostField.setPreferredSize(new Dimension(160, 28));
-        header.add(targetHostField);
+        bar.add(spacer(UiTheme.SP_SM));
 
-        enabledToggle = new JToggleButton(profile.isEnabled() ? "ACTIVE" : "DISABLED",
-            profile.isEnabled());
-        enabledToggle.setFont(UiTheme.FONT_BOLD);
-        enabledToggle.setForeground(profile.isEnabled() ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
-        enabledToggle.setBackground(UiTheme.BG_ELEVATED);
-        enabledToggle.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(UiTheme.BORDER, 1),
-            new EmptyBorder(4, 12, 4, 12)));
-        enabledToggle.setFocusPainted(false);
-        enabledToggle.addActionListener(e -> {
-            boolean on = enabledToggle.isSelected();
-            enabledToggle.setText(on ? "ACTIVE" : "DISABLED");
-            enabledToggle.setForeground(on ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
-        });
-        header.add(enabledToggle);
+        // Host field
+        bar.add(smallLabel("Host"));
+        targetHostField = compactField(profile.getTargetHost(), 150);
+        targetHostField.setToolTipText("Display label e.g. api.target.com");
+        bar.add(targetHostField);
 
-        return header;
+        bar.add(spacer(UiTheme.SP_SM));
+
+        // Enabled toggle
+        enabledToggle = buildToggle(profile.isEnabled());
+        bar.add(enabledToggle);
+
+        return bar;
     }
 
-    // --- Tab pane ---
+    private JToggleButton buildToggle(boolean on) {
+        JToggleButton t = new JToggleButton(on ? "Active" : "Inactive", on) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Color bg = isSelected() ? new Color(0x1A, 0x40, 0x1A) : UiTheme.BG_INPUT;
+                g2.setColor(bg);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        t.setFont(UiTheme.FONT_UI_SM);
+        t.setForeground(on ? UiTheme.STATUS_OK : UiTheme.TEXT_MUTED);
+        t.setOpaque(false);
+        t.setContentAreaFilled(false);
+        t.setBorderPainted(true);
+        t.setFocusPainted(false);
+        t.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(UiTheme.BORDER_NORMAL, 1),
+            new EmptyBorder(4, 10, 4, 10)));
+        t.addActionListener(e -> {
+            t.setText(t.isSelected() ? "Active" : "Inactive");
+            t.setForeground(t.isSelected() ? UiTheme.STATUS_OK : UiTheme.TEXT_MUTED);
+            t.repaint();
+        });
+        return t;
+    }
 
-    private JTabbedPane buildTabPane(SessionProfile profile) {
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.setBackground(UiTheme.BG_SURFACE);
-        tabs.setForeground(UiTheme.TEXT_PRIMARY);
-        tabs.setFont(UiTheme.FONT_NORMAL);
+    // =========================================================================
+    // TABS
+    // =========================================================================
 
-        tabs.addTab("[1] Tokens",          buildTokensTab(profile));
-        tabs.addTab("[2] Login Sequence",  buildLoginSequenceTab(profile));
-        tabs.addTab("[3] Scope",           buildScopeTab(profile));
-        tabs.addTab("[4] Error / Refresh", buildErrorRefreshTab(profile));
+    private JTabbedPane buildTabs(SessionProfile profile) {
+        JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP);
+        tabs.setBackground(UiTheme.BG_PANEL);
+        tabs.setForeground(UiTheme.TEXT_SECONDARY);
+        tabs.setFont(UiTheme.FONT_UI_SM);
+
+        // Use HTML to get consistent tab rendering
+        tabs.addTab("Tokens",         buildTokensTab(profile));
+        tabs.addTab("Login Sequence", buildLoginSequenceTab(profile));
+        tabs.addTab("Scope",          buildScopeTab(profile));
+        tabs.addTab("Error / Refresh",buildErrorRefreshTab(profile));
 
         return tabs;
     }
 
-    // --- Tab 1: Tokens ---
+    // =========================================================================
+    // TAB 1: TOKENS
+    // =========================================================================
 
     private JPanel buildTokensTab(SessionProfile profile) {
-        JPanel panel = darkPanel();
-        panel.setLayout(new BorderLayout(0, 0));
-        panel.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_LG, UiTheme.PAD_MD, UiTheme.PAD_LG));
+        JPanel panel = tabPanel();
 
         JLabel hint = UiTheme.mutedLabel(
-            "Each row: where to extract a token from a login response, and where to inject it into requests.");
-        hint.setBorder(new EmptyBorder(0, 0, UiTheme.PAD_SM, 0));
+            "Define how each token is extracted from login responses and injected into outgoing requests.");
+        hint.setBorder(new EmptyBorder(0, 0, UiTheme.SP_SM, 0));
+
         panel.add(hint, BorderLayout.NORTH);
 
-        String[] cols = {"Type", "Extract From", "Regex (1 capture group)", "Step #", "Inject At", "Key / Header Name"};
+        String[] cols = {"Type", "Extract From", "Regex (group 1)", "Step #", "Inject At", "Key / Header"};
         tokenTableModel = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return true; }
+            @Override public boolean isCellEditable(int r, int c) { return true; }
         };
 
         for (TokenDefinition td : profile.getTokens()) {
@@ -167,37 +202,35 @@ public class ProfileEditorPanel {
             });
         }
 
-        JTable table = styledTable(tokenTableModel);
+        JTable table = buildTable(tokenTableModel);
         setComboEditor(table, 0, TokenType.values());
         setComboEditor(table, 1, ExtractSource.values());
         setComboEditor(table, 4, TokenLocation.values());
-        table.getColumnModel().getColumn(2).setCellRenderer(new MonoRenderer());
+        table.getColumnModel().getColumn(2).setCellRenderer(monoRenderer());
 
-        int[] widths = {130, 160, 220, 55, 165, 140};
-        for (int i = 0; i < widths.length; i++)
-            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        setColumnWidths(table, new int[]{120, 155, 210, 50, 160, 130});
 
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        panel.add(buildRowControls(tokenTableModel, table), BorderLayout.SOUTH);
-
+        panel.add(buildTableFooter(tokenTableModel, table), BorderLayout.SOUTH);
         return panel;
     }
 
-    // --- Tab 2: Login Sequence ---
+    // =========================================================================
+    // TAB 2: LOGIN SEQUENCE
+    // =========================================================================
 
     private JPanel buildLoginSequenceTab(SessionProfile profile) {
-        JPanel panel = darkPanel();
-        panel.setLayout(new BorderLayout(0, 0));
-        panel.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_LG, UiTheme.PAD_MD, UiTheme.PAD_LG));
+        JPanel panel = tabPanel();
 
         JLabel hint = UiTheme.mutedLabel(
-            "Steps execute in order. Use {{step0:CSRF}} in a body to inject a token extracted in step 0.");
-        hint.setBorder(new EmptyBorder(0, 0, UiTheme.PAD_SM, 0));
+            "Steps execute top-to-bottom. Reference prior step tokens with {{step0:CSRF}} syntax.");
+        hint.setBorder(new EmptyBorder(0, 0, UiTheme.SP_SM, 0));
+
         panel.add(hint, BorderLayout.NORTH);
 
         String[] cols = {"Label", "Method", "URL", "Body", "Content-Type"};
         stepTableModel = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return true; }
+            @Override public boolean isCellEditable(int r, int c) { return true; }
         };
 
         for (LoginStep step : profile.getLoginSteps()) {
@@ -207,36 +240,31 @@ public class ProfileEditorPanel {
             });
         }
 
-        JTable table = styledTable(stepTableModel);
-        setComboEditor(table, 1, new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"});
-        table.getColumnModel().getColumn(2).setCellRenderer(new MonoRenderer());
-        table.getColumnModel().getColumn(3).setCellRenderer(new MonoRenderer());
-
-        int[] widths = {120, 70, 280, 220, 140};
-        for (int i = 0; i < widths.length; i++)
-            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        JTable table = buildTable(stepTableModel);
+        setComboEditor(table, 1, new String[]{"GET","POST","PUT","PATCH","DELETE"});
+        table.getColumnModel().getColumn(2).setCellRenderer(monoRenderer());
+        table.getColumnModel().getColumn(3).setCellRenderer(monoRenderer());
+        setColumnWidths(table, new int[]{120, 68, 260, 210, 140});
 
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        panel.add(buildRowControls(stepTableModel, table), BorderLayout.SOUTH);
-
+        panel.add(buildTableFooter(stepTableModel, table), BorderLayout.SOUTH);
         return panel;
     }
 
-    // --- Tab 3: Scope ---
+    // =========================================================================
+    // TAB 3: SCOPE
+    // =========================================================================
 
     private JPanel buildScopeTab(SessionProfile profile) {
-        JPanel panel = darkPanel();
-        panel.setLayout(new BorderLayout(0, 0));
-        panel.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_LG, UiTheme.PAD_MD, UiTheme.PAD_LG));
+        JPanel panel = tabPanel();
 
-        JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_SM, 0));
-        modePanel.setBackground(UiTheme.BG_SURFACE);
-        modePanel.setBorder(new EmptyBorder(0, 0, UiTheme.PAD_MD, 0));
+        // Mode selector
+        JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, 0));
+        modeRow.setOpaque(false);
+        modeRow.setBorder(new EmptyBorder(0, 0, UiTheme.SP_MD, 0));
 
-        whitelistRadio = new JRadioButton("Whitelist - only process matching URLs");
-        blacklistRadio = new JRadioButton("Blacklist - skip matching URLs");
-        styleRadio(whitelistRadio);
-        styleRadio(blacklistRadio);
+        whitelistRadio = styledRadio("Whitelist  (only process matching URLs)");
+        blacklistRadio = styledRadio("Blacklist  (skip matching URLs)");
 
         ButtonGroup group = new ButtonGroup();
         group.add(whitelistRadio);
@@ -246,114 +274,301 @@ public class ProfileEditorPanel {
         whitelistRadio.setSelected(isWhitelist);
         blacklistRadio.setSelected(!isWhitelist);
 
-        modePanel.add(UiTheme.label("Mode:"));
-        modePanel.add(whitelistRadio);
-        modePanel.add(blacklistRadio);
-        modePanel.add(UiTheme.mutedLabel("  Wildcard: *.example.com/api/*"));
+        modeRow.add(whitelistRadio);
+        modeRow.add(blacklistRadio);
+        modeRow.add(UiTheme.mutedLabel("   Wildcard: *.example.com/api/*"));
 
-        panel.add(modePanel, BorderLayout.NORTH);
+        JPanel north = new JPanel(new BorderLayout());
+        north.setOpaque(false);
+        north.add(UiTheme.mutedLabel("URL pattern rules — supports * wildcard"), BorderLayout.NORTH);
+        north.add(modeRow, BorderLayout.CENTER);
+        panel.add(north, BorderLayout.NORTH);
 
-        String[] cols = {"URL Pattern", "Enabled", "Comment"};
+        String[] cols = {"URL Pattern", "Enabled", "Note"};
         scopeTableModel = new DefaultTableModel(cols, 0) {
-            @Override public Class<?> getColumnClass(int col) {
-                return col == 1 ? Boolean.class : String.class;
-            }
-            @Override public boolean isCellEditable(int row, int col) { return true; }
+            @Override public Class<?> getColumnClass(int c) { return c == 1 ? Boolean.class : String.class; }
+            @Override public boolean isCellEditable(int r, int c) { return true; }
         };
 
         for (ScopeRule rule : profile.getScope().getRules()) {
             scopeTableModel.addRow(new Object[]{rule.getPattern(), rule.isEnabled(), rule.getComment()});
         }
 
-        JTable table = styledTable(scopeTableModel);
-        table.getColumnModel().getColumn(0).setPreferredWidth(300);
-        table.getColumnModel().getColumn(1).setPreferredWidth(60);
-        table.getColumnModel().getColumn(2).setPreferredWidth(220);
-        table.getColumnModel().getColumn(0).setCellRenderer(new MonoRenderer());
+        JTable table = buildTable(scopeTableModel);
+        table.getColumnModel().getColumn(0).setCellRenderer(monoRenderer());
+        setColumnWidths(table, new int[]{300, 60, 230});
 
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        panel.add(buildRowControls(scopeTableModel, table), BorderLayout.SOUTH);
-
+        panel.add(buildTableFooter(scopeTableModel, table), BorderLayout.SOUTH);
         return panel;
     }
 
-    // --- Tab 4: Error / Refresh ---
+    // =========================================================================
+    // TAB 4: ERROR / REFRESH
+    // =========================================================================
 
     private JPanel buildErrorRefreshTab(SessionProfile profile) {
-        JPanel panel = darkPanel();
-        panel.setLayout(new GridBagLayout());
-        panel.setBorder(new EmptyBorder(UiTheme.PAD_LG, UiTheme.PAD_LG * 2, UiTheme.PAD_LG, UiTheme.PAD_LG * 2));
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(6, 0, 6, UiTheme.PAD_MD);
+        JPanel panel = new JPanel();
+        panel.setBackground(UiTheme.BG_PANEL);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(UiTheme.SP_LG, UiTheme.SP_XL, UiTheme.SP_LG, UiTheme.SP_XL));
 
         ErrorCondition ec = profile.getErrorCondition();
 
-        addSectionTitle(panel, gbc, 0, "TRIGGER CONDITION");
-        addFormRow(panel, gbc, 1, "Trigger refresh when status code is:",
-            statusCodesField = UiTheme.textField(),
-            "Comma-separated codes, e.g. 401, 403");
-        statusCodesField.setText(
-            ec.getTriggerOnStatusCodes().stream()
-              .map(String::valueOf)
-              .collect(Collectors.joining(", ")));
+        // Section: Trigger
+        panel.add(sectionDivider("Trigger Condition"));
+        panel.add(Box.createVerticalStrut(UiTheme.SP_MD));
 
-        addFormRow(panel, gbc, 2, "Also require body contains (optional):",
+        panel.add(formRow(
+            "Trigger refresh on status code(s):",
+            statusCodesField = UiTheme.textField(),
+            "Comma-separated, e.g. 401, 403"));
+        statusCodesField.setText(
+            ec.getTriggerOnStatusCodes().stream().map(String::valueOf).collect(Collectors.joining(", ")));
+        panel.add(Box.createVerticalStrut(UiTheme.SP_SM));
+
+        panel.add(formRow(
+            "Also require body contains (optional):",
             bodyKeywordField = UiTheme.textField(),
-            "Only trigger if response body contains this text");
+            "Only trigger refresh if response body includes this text"));
         bodyKeywordField.setText(ec.getTriggerOnBodyKeyword());
 
-        gbc.gridy = 3; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 0.05;
-        panel.add(new JLabel(), gbc);
-        gbc.weighty = 0; gbc.gridwidth = 1;
+        panel.add(Box.createVerticalStrut(UiTheme.SP_XL));
 
-        addSectionTitle(panel, gbc, 4, "REFRESH EXCLUSION");
-        addFormRow(panel, gbc, 5, "Skip token injection for requests to URL:",
+        // Section: Exclusion
+        panel.add(sectionDivider("Refresh Exclusion"));
+        panel.add(Box.createVerticalStrut(UiTheme.SP_MD));
+
+        panel.add(formRow(
+            "Skip injection for requests matching:",
             excludeUrlField = UiTheme.monoField(),
-            "Prevents infinite loop - enter your login/token endpoint here");
+            "Prevents infinite refresh loop. Enter your login endpoint path."));
         excludeUrlField.setText(ec.getRefreshExcludeUrl());
 
-        gbc.gridy = 6; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1.0;
-        panel.add(new JLabel(), gbc);
+        panel.add(Box.createVerticalGlue());
 
-        return panel;
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(UiTheme.BG_PANEL);
+
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBackground(UiTheme.BG_PANEL);
+        wrapper.add(scroll, BorderLayout.CENTER);
+        return wrapper;
     }
 
-    // --- Action bar ---
+    // =========================================================================
+    // ACTION BAR
+    // =========================================================================
 
     private JPanel buildActionBar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.PAD_SM, UiTheme.PAD_SM));
-        bar.setBackground(UiTheme.BG_SURFACE);
-        bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(UiTheme.BG_PANEL);
+        bar.setBorder(new MatteBorder(1, 0, 0, 0, UiTheme.BORDER_SUBTLE));
 
-        JButton saveBtn = UiTheme.primaryButton("Save Profile");
+        // Left: primary actions
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, UiTheme.SP_SM));
+        left.setOpaque(false);
+
+        JButton saveBtn = UiTheme.primaryButton("Save");
         saveBtn.addActionListener(e -> saveCurrentProfile());
-        bar.add(saveBtn);
+        left.add(saveBtn);
 
         JButton runBtn = UiTheme.button("Run Login Now");
         runBtn.setToolTipText("Manually trigger the login sequence to populate tokens");
         runBtn.addActionListener(e -> runLoginNow());
-        bar.add(runBtn);
+        left.add(runBtn);
 
         JButton exportBtn = UiTheme.button("Export JSON");
         exportBtn.addActionListener(e -> exportProfile());
-        bar.add(exportBtn);
+        left.add(exportBtn);
 
         JButton importBtn = UiTheme.button("Import JSON");
         importBtn.addActionListener(e -> importProfile());
-        bar.add(importBtn);
+        left.add(importBtn);
 
-        bar.add(Box.createHorizontalGlue());
+        // Right: destructive action
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_SM, UiTheme.SP_SM));
+        right.setOpaque(false);
 
         JButton deleteBtn = UiTheme.dangerButton("Delete Profile");
         deleteBtn.addActionListener(e -> deleteCurrentProfile());
-        bar.add(deleteBtn);
+        right.add(deleteBtn);
 
+        bar.add(left, BorderLayout.WEST);
+        bar.add(right, BorderLayout.EAST);
         return bar;
     }
 
-    // --- Save logic ---
+    // =========================================================================
+    // TABLE BUILDER
+    // =========================================================================
+
+    private JPanel buildTableFooter(DefaultTableModel model, JTable table) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_SM, UiTheme.SP_SM));
+        row.setBackground(UiTheme.BG_PANEL);
+        row.setBorder(new MatteBorder(1, 0, 0, 0, UiTheme.BORDER_SUBTLE));
+
+        JButton addBtn = UiTheme.button("+ Add Row");
+        addBtn.addActionListener(e -> model.addRow(new Object[model.getColumnCount()]));
+        row.add(addBtn);
+
+        JButton removeBtn = UiTheme.button("Remove Row");
+        removeBtn.addActionListener(e -> {
+            int sel = table.getSelectedRow();
+            if (sel >= 0) model.removeRow(sel);
+        });
+        row.add(removeBtn);
+
+        return row;
+    }
+
+    private JTable buildTable(DefaultTableModel model) {
+        JTable table = new JTable(model) {
+            // Zebra-stripe rows
+            @Override
+            public Component prepareRenderer(TableCellRenderer renderer, int row, int col) {
+                Component c = super.prepareRenderer(renderer, row, col);
+                if (!isRowSelected(row)) {
+                    c.setBackground(row % 2 == 0 ? UiTheme.BG_PANEL : UiTheme.BG_ROW_ALT);
+                }
+                return c;
+            }
+        };
+
+        table.setBackground(UiTheme.BG_PANEL);
+        table.setForeground(UiTheme.TEXT_PRIMARY);
+        table.setFont(UiTheme.FONT_UI);
+        table.setGridColor(UiTheme.BORDER_SUBTLE);
+        table.setRowHeight(28);
+        table.setShowHorizontalLines(true);
+        table.setShowVerticalLines(false);
+        table.setIntercellSpacing(new Dimension(0, 0));
+        table.setSelectionBackground(new Color(0x1F, 0x6F, 0xEB, 60));
+        table.setSelectionForeground(UiTheme.TEXT_PRIMARY);
+
+        JTableHeader header = table.getTableHeader();
+        header.setBackground(UiTheme.BG_PANEL);
+        header.setForeground(UiTheme.TEXT_SECONDARY);
+        header.setFont(UiTheme.FONT_LABEL);
+        header.setBorder(new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_NORMAL));
+        header.setReorderingAllowed(false);
+
+        // Default cell renderer: dark background
+        DefaultTableCellRenderer defaultRenderer = new DefaultTableCellRenderer();
+        defaultRenderer.setBackground(UiTheme.BG_PANEL);
+        defaultRenderer.setForeground(UiTheme.TEXT_PRIMARY);
+        defaultRenderer.setFont(UiTheme.FONT_UI);
+        defaultRenderer.setBorder(new EmptyBorder(0, 8, 0, 8));
+        table.setDefaultRenderer(Object.class, defaultRenderer);
+
+        return table;
+    }
+
+    private TableCellRenderer monoRenderer() {
+        DefaultTableCellRenderer r = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object val, boolean sel, boolean focus, int row, int col) {
+                super.getTableCellRendererComponent(t, val, sel, focus, row, col);
+                setFont(UiTheme.FONT_MONO_SM);
+                setBorder(new EmptyBorder(0, 8, 0, 8));
+                if (!sel) setBackground(row % 2 == 0 ? UiTheme.BG_PANEL : UiTheme.BG_ROW_ALT);
+                return this;
+            }
+        };
+        r.setForeground(UiTheme.TEXT_PRIMARY);
+        return r;
+    }
+
+    private <T> void setComboEditor(JTable table, int col, T[] values) {
+        JComboBox<T> combo = new JComboBox<>(values);
+        combo.setBackground(UiTheme.BG_INPUT);
+        combo.setForeground(UiTheme.TEXT_PRIMARY);
+        combo.setFont(UiTheme.FONT_UI);
+        table.getColumnModel().getColumn(col).setCellEditor(new DefaultCellEditor(combo));
+    }
+
+    private void setColumnWidths(JTable table, int[] widths) {
+        for (int i = 0; i < widths.length && i < table.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        }
+    }
+
+    // =========================================================================
+    // FORM HELPERS
+    // =========================================================================
+
+    /** A standard label-above-field form row for the error/refresh tab */
+    private JPanel formRow(String labelText, JTextField field, String hint) {
+        JPanel row = new JPanel(new BorderLayout(0, UiTheme.SP_XS));
+        row.setOpaque(false);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+
+        JLabel lbl = new JLabel(labelText);
+        lbl.setFont(UiTheme.FONT_UI_SM);
+        lbl.setForeground(UiTheme.TEXT_SECONDARY);
+        row.add(lbl, BorderLayout.NORTH);
+
+        field.setToolTipText(hint);
+        row.add(field, BorderLayout.CENTER);
+
+        return row;
+    }
+
+    /** Sectional divider with title — a label + line */
+    private JPanel sectionDivider(String title) {
+        JPanel div = new JPanel(new BorderLayout(UiTheme.SP_SM, 0));
+        div.setOpaque(false);
+        div.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+
+        JLabel lbl = UiTheme.sectionLabel(title);
+        lbl.setBorder(null);
+        div.add(lbl, BorderLayout.WEST);
+
+        JSeparator line = new JSeparator();
+        line.setForeground(UiTheme.BORDER_SUBTLE);
+        div.add(line, BorderLayout.CENTER);
+
+        return div;
+    }
+
+    private JLabel smallLabel(String text) {
+        JLabel l = new JLabel(text);
+        l.setFont(UiTheme.FONT_UI_SM);
+        l.setForeground(UiTheme.TEXT_SECONDARY);
+        return l;
+    }
+
+    private JTextField compactField(String text, int width) {
+        JTextField f = UiTheme.textField();
+        f.setText(text);
+        f.setPreferredSize(new Dimension(width, 28));
+        return f;
+    }
+
+    private JRadioButton styledRadio(String text) {
+        JRadioButton r = new JRadioButton(text);
+        r.setFont(UiTheme.FONT_UI_SM);
+        r.setForeground(UiTheme.TEXT_SECONDARY);
+        r.setBackground(UiTheme.BG_PANEL);
+        r.setOpaque(false);
+        return r;
+    }
+
+    private Component spacer(int w) {
+        return Box.createHorizontalStrut(w);
+    }
+
+    private JPanel tabPanel() {
+        JPanel p = new JPanel(new BorderLayout(0, 0));
+        p.setBackground(UiTheme.BG_PANEL);
+        p.setBorder(new EmptyBorder(UiTheme.SP_MD, UiTheme.SP_LG, 0, UiTheme.SP_LG));
+        return p;
+    }
+
+    // =========================================================================
+    // SAVE / ACTIONS
+    // =========================================================================
 
     private void saveCurrentProfile() {
         if (currentProfile == null) return;
@@ -362,21 +577,22 @@ public class ProfileEditorPanel {
         currentProfile.setTargetHost(targetHostField.getText().trim());
         currentProfile.setEnabled(enabledToggle.isSelected());
 
+        // Tokens
         List<TokenDefinition> tokens = new ArrayList<>();
         for (int i = 0; i < tokenTableModel.getRowCount(); i++) {
             TokenDefinition td = new TokenDefinition();
-            td.setTokenType((TokenType) tokenTableModel.getValueAt(i, 0));
-            td.setExtractFrom((ExtractSource) tokenTableModel.getValueAt(i, 1));
+            td.setTokenType(val(tokenTableModel, i, 0, TokenType.class));
+            td.setExtractFrom(val(tokenTableModel, i, 1, ExtractSource.class));
             td.setExtractRegex(str(tokenTableModel.getValueAt(i, 2)));
-            try {
-                td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 3))));
-            } catch (NumberFormatException ignored) {}
-            td.setInjectLocation((TokenLocation) tokenTableModel.getValueAt(i, 4));
+            try { td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 3)))); }
+            catch (NumberFormatException ignored) {}
+            td.setInjectLocation(val(tokenTableModel, i, 4, TokenLocation.class));
             td.setInjectKey(str(tokenTableModel.getValueAt(i, 5)));
             tokens.add(td);
         }
         currentProfile.setTokens(tokens);
 
+        // Login steps
         List<LoginStep> steps = new ArrayList<>();
         for (int i = 0; i < stepTableModel.getRowCount(); i++) {
             LoginStep step = new LoginStep();
@@ -390,6 +606,7 @@ public class ProfileEditorPanel {
         }
         currentProfile.setLoginSteps(steps);
 
+        // Scope
         ScopeList scope = new ScopeList();
         scope.setMode(whitelistRadio.isSelected() ? ScopeMode.WHITELIST : ScopeMode.BLACKLIST);
         List<ScopeRule> rules = new ArrayList<>();
@@ -403,14 +620,13 @@ public class ProfileEditorPanel {
         scope.setRules(rules);
         currentProfile.setScope(scope);
 
+        // Error condition
         ErrorCondition ec = new ErrorCondition();
         String codes = statusCodesField.getText().trim();
         if (!codes.isBlank()) {
             List<Integer> codeList = Arrays.stream(codes.split(","))
-                .map(String::trim)
-                .filter(s -> s.matches("\\d+"))
-                .map(Integer::parseInt)
-                .collect(Collectors.toList());
+                .map(String::trim).filter(s -> s.matches("\\d+"))
+                .map(Integer::parseInt).collect(Collectors.toList());
             ec.setTriggerOnStatusCodes(codeList);
         }
         ec.setTriggerOnBodyKeyword(bodyKeywordField.getText().trim());
@@ -418,8 +634,13 @@ public class ProfileEditorPanel {
         currentProfile.setErrorCondition(ec);
 
         profileManager.updateProfile(currentProfile);
-        JOptionPane.showMessageDialog(root, "Profile \"" + currentProfile.getName() + "\" saved.",
-            "Saved", JOptionPane.INFORMATION_MESSAGE);
+
+        // Brief feedback via toggle button text
+        enabledToggle.setForeground(UiTheme.STATUS_OK);
+        Timer t = new Timer(1200, e -> enabledToggle.setForeground(
+            enabledToggle.isSelected() ? UiTheme.STATUS_OK : UiTheme.TEXT_MUTED));
+        t.setRepeats(false);
+        t.start();
     }
 
     private void runLoginNow() {
@@ -428,14 +649,14 @@ public class ProfileEditorPanel {
         new Thread(() -> {
             LoginExecutor exec = new LoginExecutor(api, tokenStore, ActivityLogger.getInstance());
             exec.execute(currentProfile);
-        }).start();
+        }, "sessionx-login").start();
     }
 
     private void deleteCurrentProfile() {
         if (currentProfile == null) return;
         int confirm = JOptionPane.showConfirmDialog(root,
-            "Delete profile \"" + currentProfile.getName() + "\"?",
-            "Confirm Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            "Delete \"" + currentProfile.getName() + "\"?",
+            "Confirm", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
             profileManager.deleteProfile(currentProfile.getId());
             currentProfile = null;
@@ -451,11 +672,9 @@ public class ProfileEditorPanel {
         if (fc.showSaveDialog(root) == JFileChooser.APPROVE_OPTION) {
             try {
                 profileManager.exportToFile(currentProfile, fc.getSelectedFile());
-                JOptionPane.showMessageDialog(root, "Profile exported successfully.",
-                    "Export", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(root, "Profile exported.", "Done", JOptionPane.INFORMATION_MESSAGE);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(root, "Export failed: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(root, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -467,121 +686,23 @@ public class ProfileEditorPanel {
             try {
                 SessionProfile imported = profileManager.importFromFile(fc.getSelectedFile());
                 loadProfile(imported);
-                JOptionPane.showMessageDialog(root, "Profile imported: \"" + imported.getName() + "\"",
-                    "Import", JOptionPane.INFORMATION_MESSAGE);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(root, "Import failed: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(root, "Import failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
 
-    // --- UI Helpers ---
+    // =========================================================================
+    // UTILITIES
+    // =========================================================================
 
-    private JPanel darkPanel() {
-        JPanel p = new JPanel();
-        p.setBackground(UiTheme.BG_SURFACE);
-        return p;
-    }
+    private String str(Object val) { return val == null ? "" : val.toString(); }
 
-    private JTable styledTable(DefaultTableModel model) {
-        JTable table = new JTable(model);
-        table.setBackground(UiTheme.BG_ELEVATED);
-        table.setForeground(UiTheme.TEXT_PRIMARY);
-        table.setFont(UiTheme.FONT_NORMAL);
-        table.setGridColor(UiTheme.BORDER);
-        table.setRowHeight(26);
-        table.setSelectionBackground(new Color(0x1F, 0x6F, 0xEB, 80));
-        table.setSelectionForeground(UiTheme.TEXT_PRIMARY);
-        table.setShowGrid(true);
-        table.setIntercellSpacing(new Dimension(1, 1));
-        table.getTableHeader().setBackground(UiTheme.BG_SURFACE);
-        table.getTableHeader().setForeground(UiTheme.TEXT_MUTED);
-        table.getTableHeader().setFont(UiTheme.FONT_SMALL);
-        table.getTableHeader().setBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
-        return table;
-    }
-
-    private JPanel buildRowControls(DefaultTableModel model, JTable table) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.PAD_SM, UiTheme.PAD_SM));
-        row.setBackground(UiTheme.BG_SURFACE);
-
-        JButton addBtn = UiTheme.button("+ Add Row");
-        addBtn.addActionListener(e -> model.addRow(new Object[model.getColumnCount()]));
-        row.add(addBtn);
-
-        JButton removeBtn = UiTheme.dangerButton("Remove Selected");
-        removeBtn.addActionListener(e -> {
-            int selected = table.getSelectedRow();
-            if (selected >= 0) model.removeRow(selected);
-        });
-        row.add(removeBtn);
-
-        return row;
-    }
-
-    private <T> void setComboEditor(JTable table, int col, T[] values) {
-        JComboBox<T> combo = new JComboBox<>(values);
-        combo.setBackground(UiTheme.BG_ELEVATED);
-        combo.setForeground(UiTheme.TEXT_PRIMARY);
-        combo.setFont(UiTheme.FONT_NORMAL);
-        table.getColumnModel().getColumn(col).setCellEditor(new DefaultCellEditor(combo));
-    }
-
-    private void addSectionTitle(JPanel panel, GridBagConstraints gbc, int row, String title) {
-        gbc.gridy = row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weightx = 1.0;
-        JLabel lbl = new JLabel(title);
-        lbl.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        lbl.setForeground(UiTheme.TEXT_MUTED);
-        lbl.setBorder(new EmptyBorder(0, 0, 2, 0));
-        panel.add(lbl, gbc);
-        gbc.gridy++; gbc.gridx = 0; gbc.gridwidth = 2;
-        panel.add(UiTheme.separator(), gbc);
-        gbc.gridwidth = 1;
-    }
-
-    private void addFormRow(JPanel panel, GridBagConstraints gbc,
-                             int row, String labelText,
-                             JTextField field, String hint) {
-        gbc.gridy = row; gbc.gridx = 0; gbc.weightx = 0;
-        JLabel lbl = UiTheme.label(labelText);
-        lbl.setPreferredSize(new Dimension(260, 28));
-        panel.add(lbl, gbc);
-
-        gbc.gridx = 1; gbc.weightx = 1.0;
-        field.setToolTipText(hint);
-        panel.add(field, gbc);
-    }
-
-    private void styleRadio(JRadioButton radio) {
-        radio.setFont(UiTheme.FONT_NORMAL);
-        radio.setForeground(UiTheme.TEXT_PRIMARY);
-        radio.setBackground(UiTheme.BG_SURFACE);
-    }
-
-    private String str(Object val) {
-        return val == null ? "" : val.toString();
-    }
-
-    // --- Inner: Monospace cell renderer ---
-
-    private static class MonoRenderer extends DefaultTableCellRenderer {
-        MonoRenderer() {
-            setFont(UiTheme.FONT_MONO);
-            setBackground(UiTheme.BG_ELEVATED);
-            setForeground(UiTheme.TEXT_PRIMARY);
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                boolean isSelected, boolean hasFocus, int row, int column) {
-            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setBackground(isSelected ? new Color(0x1F, 0x6F, 0xEB, 80) : UiTheme.BG_ELEVATED);
-            setForeground(UiTheme.TEXT_PRIMARY);
-            setFont(UiTheme.FONT_MONO);
-            return this;
-        }
+    @SuppressWarnings("unchecked")
+    private <T> T val(DefaultTableModel m, int row, int col, Class<T> type) {
+        Object v = m.getValueAt(row, col);
+        if (type.isInstance(v)) return (T) v;
+        return null;
     }
 
     public JPanel getPanel() { return root; }

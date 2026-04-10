@@ -5,15 +5,20 @@ import com.burpext.sessionx.engine.ProfileManager;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 
 /**
- * Left sidebar showing the list of session profiles.
+ * Left sidebar: ordered list of session profiles.
  *
- * Each profile is shown as a card with status LED, name, and target host.
- * Clicking a card loads it in ProfileEditorPanel.
- * "New Profile" button at the bottom creates a blank profile.
+ * Design intent:
+ *   - Each entry is a single row: [status dot] [name]  [host]
+ *   - Selection is indicated by a left-edge highlight bar, not background fill
+ *   - "New Profile" sits pinned at the bottom, visually separated
+ *   - No icons, no badges, no decorative elements
  */
 public class ProfileListPanel {
 
@@ -22,67 +27,85 @@ public class ProfileListPanel {
     private final ProfileManager  profileManager;
     private final ProfileEditorPanel editorPanel;
 
+    private JPanel selectedCard = null;
+
     public ProfileListPanel(ProfileManager profileManager, ProfileEditorPanel editorPanel) {
         this.profileManager = profileManager;
         this.editorPanel    = editorPanel;
 
         root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(UiTheme.BG_SURFACE);
-        root.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, UiTheme.BORDER));
-        root.setMinimumSize(new Dimension(190, 0));
+        root.setBackground(UiTheme.BG_PANEL);
+        root.setBorder(new MatteBorder(0, 0, 0, 1, UiTheme.BORDER_SUBTLE));
+        root.setMinimumSize(new Dimension(180, 0));
         root.setPreferredSize(new Dimension(220, 0));
 
-        // Header
+        // Column header
         JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(UiTheme.BG_SURFACE);
-        header.setBorder(new EmptyBorder(UiTheme.PAD_MD, UiTheme.PAD_MD, UiTheme.PAD_SM, UiTheme.PAD_MD));
-
-        JLabel title = UiTheme.label("PROFILES");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        title.setForeground(UiTheme.TEXT_MUTED);
-        header.add(title, BorderLayout.CENTER);
-
+        header.setBackground(UiTheme.BG_PANEL);
+        header.setBorder(new EmptyBorder(UiTheme.SP_LG, UiTheme.SP_MD, UiTheme.SP_SM, UiTheme.SP_MD));
+        header.add(UiTheme.sectionLabel("Profiles"), BorderLayout.WEST);
         root.add(header, BorderLayout.NORTH);
 
-        // Scrollable profile list
+        // Profile entries (scrollable)
         listContainer = new JPanel();
         listContainer.setLayout(new BoxLayout(listContainer, BoxLayout.Y_AXIS));
-        listContainer.setBackground(UiTheme.BG_SURFACE);
+        listContainer.setBackground(UiTheme.BG_PANEL);
 
         JScrollPane scroll = new JScrollPane(listContainer);
         scroll.setBorder(null);
-        scroll.setBackground(UiTheme.BG_SURFACE);
-        scroll.getViewport().setBackground(UiTheme.BG_SURFACE);
+        scroll.setBackground(UiTheme.BG_PANEL);
+        scroll.getViewport().setBackground(UiTheme.BG_PANEL);
+        scroll.getVerticalScrollBar().setBackground(UiTheme.BG_PANEL);
         root.add(scroll, BorderLayout.CENTER);
 
-        // Footer: New Profile button
+        // Footer: new profile button
         JPanel footer = new JPanel(new BorderLayout());
-        footer.setBackground(UiTheme.BG_SURFACE);
-        footer.setBorder(new EmptyBorder(UiTheme.PAD_SM, UiTheme.PAD_SM, UiTheme.PAD_SM, UiTheme.PAD_SM));
+        footer.setBackground(UiTheme.BG_PANEL);
+        footer.setBorder(new MatteBorder(1, 0, 0, 0, UiTheme.BORDER_SUBTLE));
 
-        JButton newBtn = UiTheme.primaryButton("+ New Profile");
-        newBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        JButton newBtn = new JButton("+ New Profile") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                if (getModel().isRollover()) {
+                    g2.setColor(UiTheme.BG_HOVER);
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                }
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        newBtn.setFont(UiTheme.FONT_UI_SM);
+        newBtn.setForeground(UiTheme.TEXT_ACCENT);
+        newBtn.setBackground(UiTheme.BG_PANEL);
+        newBtn.setOpaque(false);
+        newBtn.setContentAreaFilled(false);
+        newBtn.setBorderPainted(false);
+        newBtn.setFocusPainted(false);
+        newBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        newBtn.setBorder(new EmptyBorder(UiTheme.SP_MD, UiTheme.SP_MD, UiTheme.SP_MD, UiTheme.SP_MD));
+        newBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         newBtn.addActionListener(e -> createNewProfile());
         footer.add(newBtn, BorderLayout.CENTER);
-
         root.add(footer, BorderLayout.SOUTH);
 
         refresh();
     }
 
-    // --- Refresh the profile list ---
+    // --- Refresh the list ---
 
     public void refresh() {
+        int scrollPos = 0;
         listContainer.removeAll();
-        List<SessionProfile> profiles = profileManager.getAllProfiles();
 
+        List<SessionProfile> profiles = profileManager.getAllProfiles();
         if (profiles.isEmpty()) {
             JLabel empty = UiTheme.mutedLabel("No profiles yet.");
-            empty.setBorder(new EmptyBorder(16, 14, 0, 0));
+            empty.setBorder(new EmptyBorder(UiTheme.SP_MD, UiTheme.SP_MD, 0, 0));
             listContainer.add(empty);
         } else {
             for (SessionProfile p : profiles) {
-                listContainer.add(buildProfileCard(p));
+                listContainer.add(buildRow(p));
             }
         }
 
@@ -90,82 +113,105 @@ public class ProfileListPanel {
         listContainer.repaint();
     }
 
-    // --- Profile card ---
+    // --- Profile row ---
 
-    private JPanel buildProfileCard(SessionProfile profile) {
-        JPanel card = new JPanel(new BorderLayout(UiTheme.PAD_SM, 0));
-        card.setBackground(UiTheme.BG_SURFACE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER),
-            new EmptyBorder(10, 12, 10, 12)));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
-        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    private JPanel buildRow(SessionProfile profile) {
+        // Container: left-accent-bar + content
+        JPanel wrapper = new JPanel(new BorderLayout(0, 0));
+        wrapper.setBackground(UiTheme.BG_PANEL);
+        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
+        wrapper.setOpaque(true);
+        wrapper.setBorder(new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE));
 
-        // Status LED (circle indicator)
-        JLabel led = new JLabel(profile.isEnabled() ? "( * )" : "(   )");
-        led.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        led.setForeground(profile.isEnabled() ? UiTheme.ACCENT_GREEN : UiTheme.TEXT_MUTED);
-        card.add(led, BorderLayout.WEST);
+        // Left-edge accent bar (visible only when selected)
+        JPanel accentBar = new JPanel();
+        accentBar.setPreferredSize(new Dimension(3, 0));
+        accentBar.setBackground(UiTheme.BG_PANEL); // hidden by default
+        wrapper.add(accentBar, BorderLayout.WEST);
 
-        // Name + host
-        JPanel textBlock = new JPanel();
-        textBlock.setLayout(new BoxLayout(textBlock, BoxLayout.Y_AXIS));
-        textBlock.setBackground(UiTheme.BG_SURFACE);
-
-        JLabel nameLabel = UiTheme.label(profile.getName());
-        nameLabel.setFont(UiTheme.FONT_BOLD);
-
-        JLabel hostLabel = UiTheme.mutedLabel(
-            profile.getTargetHost().isEmpty() ? "No host set" : profile.getTargetHost());
-
-        textBlock.add(nameLabel);
-        textBlock.add(hostLabel);
-        card.add(textBlock, BorderLayout.CENTER);
-
-        // Click handler - load in editor
-        card.addMouseListener(new java.awt.event.MouseAdapter() {
+        // Status dot
+        JLabel dot = new JLabel() {
             @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                highlightCard(card);
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(profile.isEnabled() ? UiTheme.STATUS_OK : UiTheme.STATUS_OFF);
+                g2.fillOval(0, (getHeight() - 7) / 2, 7, 7);
+                g2.dispose();
+            }
+        };
+        dot.setPreferredSize(new Dimension(7, 7));
+        dot.setOpaque(false);
+
+        // Name label
+        JLabel nameLabel = new JLabel(profile.getName());
+        nameLabel.setFont(UiTheme.FONT_UI);
+        nameLabel.setForeground(UiTheme.TEXT_PRIMARY);
+
+        // Host sublabel
+        JLabel hostLabel = new JLabel(
+            profile.getTargetHost().isEmpty() ? "no host set" : profile.getTargetHost());
+        hostLabel.setFont(UiTheme.FONT_UI_SM);
+        hostLabel.setForeground(UiTheme.TEXT_MUTED);
+
+        // Text block
+        JPanel text = new JPanel();
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        text.setOpaque(false);
+        text.setBorder(new EmptyBorder(0, UiTheme.SP_SM, 0, 0));
+        text.add(nameLabel);
+        text.add(hostLabel);
+
+        // Content area: dot + text
+        JPanel content = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, 0));
+        content.setOpaque(false);
+        content.setBorder(new EmptyBorder(0, UiTheme.SP_SM, 0, UiTheme.SP_SM));
+        content.add(dot);
+        content.add(text);
+
+        wrapper.add(content, BorderLayout.CENTER);
+
+        // Mouse: hover + click
+        wrapper.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                selectCard(wrapper, accentBar);
                 editorPanel.loadProfile(profile);
             }
 
             @Override
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                if (!card.getBackground().equals(UiTheme.BG_ELEVATED)) {
-                    card.setBackground(new Color(0x1C, 0x22, 0x2A));
-                    textBlock.setBackground(card.getBackground());
+            public void mouseEntered(MouseEvent e) {
+                if (wrapper != selectedCard) {
+                    wrapper.setBackground(UiTheme.BG_HOVER);
+                    content.setBackground(UiTheme.BG_HOVER);
                 }
             }
 
             @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                if (!card.getBackground().equals(UiTheme.BG_ELEVATED)) {
-                    card.setBackground(UiTheme.BG_SURFACE);
-                    textBlock.setBackground(UiTheme.BG_SURFACE);
+            public void mouseExited(MouseEvent e) {
+                if (wrapper != selectedCard) {
+                    wrapper.setBackground(UiTheme.BG_PANEL);
+                    content.setBackground(UiTheme.BG_PANEL);
                 }
             }
         });
 
-        return card;
+        return wrapper;
     }
 
-    private void highlightCard(JPanel selected) {
-        for (Component c : listContainer.getComponents()) {
-            if (c instanceof JPanel p) {
-                p.setBackground(UiTheme.BG_SURFACE);
-                for (Component child : p.getComponents()) {
-                    if (child instanceof JPanel) child.setBackground(UiTheme.BG_SURFACE);
-                }
-            }
+    private void selectCard(JPanel card, JPanel accentBar) {
+        // Deselect current
+        if (selectedCard != null) {
+            selectedCard.setBackground(UiTheme.BG_PANEL);
+            // Reset accent bar of old selection
+            Component westComp = ((BorderLayout) selectedCard.getLayout()).getLayoutComponent(BorderLayout.WEST);
+            if (westComp != null) westComp.setBackground(UiTheme.BG_PANEL);
         }
-        selected.setBackground(UiTheme.BG_ELEVATED);
-        for (Component c : selected.getComponents()) {
-            if (c instanceof JPanel) c.setBackground(UiTheme.BG_ELEVATED);
-        }
+        // Select new
+        selectedCard = card;
+        card.setBackground(UiTheme.BG_HOVER);
+        accentBar.setBackground(UiTheme.TEXT_ACCENT);
     }
-
-    // --- Actions ---
 
     private void createNewProfile() {
         SessionProfile profile = new SessionProfile();
