@@ -103,7 +103,7 @@ public class ProfileManager {
     public void exportToFile(SessionProfile profile, File file) throws IOException {
         String json = JsonUtil.toPrettyJson(profile);
         Files.writeString(file.toPath(), json);
-        logger.info("Profile exported: \"" + profile.getName() + "\" → " + file.getName());
+        logger.info("Profile exported: \"" + profile.getName() + "\" -> " + file.getName());
     }
 
     /**

@@ -69,7 +69,7 @@ public class LoginExecutor {
                 HttpRequestResponse response = api.http().sendRequest(request);
 
                 int status = response.response().statusCode();
-                logger.info("  → " + status + " " + response.response().reasonPhrase());
+                logger.info("  -> " + status + " " + response.response().reasonPhrase());
 
                 // Store response parts for token extraction
                 String bodyStr    = response.response().bodyToString();
@@ -93,7 +93,7 @@ public class LoginExecutor {
                     if (extracted != null && !extracted.isBlank()) {
                         tokenStore.setToken(profileId, td.getTokenType(), extracted);
                         logger.token(td.getTokenType() + " extracted"
-                            + " → " + preview(extracted));
+                            + " -> " + preview(extracted));
                     } else {
                         logger.warn("Could not extract " + td.getTokenType()
                             + " from step " + (i + 1) + " — regex: " + td.getExtractRegex());
