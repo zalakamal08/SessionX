@@ -116,79 +116,90 @@ public class ProfileListPanel {
     // --- Profile row ---
 
     private JPanel buildRow(SessionProfile profile) {
-        // Container: left-accent-bar + content
         JPanel wrapper = new JPanel(new BorderLayout(0, 0));
         wrapper.setBackground(UiTheme.BG_PANEL);
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
+        wrapper.setPreferredSize(new Dimension(Integer.MAX_VALUE, 52));
         wrapper.setOpaque(true);
         wrapper.setBorder(new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE));
 
-        // Left-edge accent bar (visible only when selected)
+        // Left-edge accent bar (visible only when selected, 3px wide)
         JPanel accentBar = new JPanel();
-        accentBar.setPreferredSize(new Dimension(3, 0));
-        accentBar.setBackground(UiTheme.BG_PANEL); // hidden by default
+        accentBar.setPreferredSize(new Dimension(3, 52));
+        accentBar.setBackground(UiTheme.BG_PANEL);
+        accentBar.setOpaque(true);
         wrapper.add(accentBar, BorderLayout.WEST);
 
-        // Status dot
-        JLabel dot = new JLabel() {
+        // Content: horizontally arranged with fixed left padding
+        JPanel content = new JPanel(new GridBagLayout());
+        content.setBackground(UiTheme.BG_PANEL);
+        content.setOpaque(true);
+        content.setBorder(new EmptyBorder(0, UiTheme.SP_MD, 0, UiTheme.SP_SM));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridy  = 0;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        // Status dot — fixed width, vertically centered
+        gbc.gridx   = 0;
+        gbc.gridheight = 2;
+        gbc.fill    = GridBagConstraints.NONE;
+        gbc.insets  = new Insets(0, 0, 0, UiTheme.SP_SM);
+        gbc.weightx = 0;
+        JPanel dot = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(profile.isEnabled() ? UiTheme.STATUS_OK : UiTheme.STATUS_OFF);
-                g2.fillOval(0, (getHeight() - 7) / 2, 7, 7);
+                int d = 7;
+                g2.fillOval((getWidth() - d) / 2, (getHeight() - d) / 2, d, d);
                 g2.dispose();
             }
         };
-        dot.setPreferredSize(new Dimension(7, 7));
+        dot.setPreferredSize(new Dimension(11, 11));
         dot.setOpaque(false);
+        content.add(dot, gbc);
 
         // Name label
+        gbc.gridx     = 1;
+        gbc.gridy     = 0;
+        gbc.gridheight = 1;
+        gbc.anchor    = GridBagConstraints.SOUTHWEST;
+        gbc.fill      = GridBagConstraints.HORIZONTAL;
+        gbc.weightx   = 1.0;
+        gbc.insets    = new Insets(0, 0, 1, 0);
         JLabel nameLabel = new JLabel(profile.getName());
         nameLabel.setFont(UiTheme.FONT_UI);
         nameLabel.setForeground(UiTheme.TEXT_PRIMARY);
+        content.add(nameLabel, gbc);
 
-        // Host sublabel
+        // Host sub-label
+        gbc.gridy  = 1;
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.insets = new Insets(1, 0, 0, 0);
         JLabel hostLabel = new JLabel(
             profile.getTargetHost().isEmpty() ? "no host set" : profile.getTargetHost());
         hostLabel.setFont(UiTheme.FONT_UI_SM);
         hostLabel.setForeground(UiTheme.TEXT_MUTED);
-
-        // Text block
-        JPanel text = new JPanel();
-        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
-        text.setOpaque(false);
-        text.setBorder(new EmptyBorder(0, UiTheme.SP_SM, 0, 0));
-        text.add(nameLabel);
-        text.add(hostLabel);
-
-        // Content area: dot + text
-        JPanel content = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, 0));
-        content.setOpaque(false);
-        content.setBorder(new EmptyBorder(0, UiTheme.SP_SM, 0, UiTheme.SP_SM));
-        content.add(dot);
-        content.add(text);
+        content.add(hostLabel, gbc);
 
         wrapper.add(content, BorderLayout.CENTER);
 
-        // Mouse: hover + click
+        // Mouse interactions
         wrapper.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                selectCard(wrapper, accentBar);
+            @Override public void mouseClicked(MouseEvent e) {
+                selectCard(wrapper, accentBar, content);
                 editorPanel.loadProfile(profile);
             }
-
-            @Override
-            public void mouseEntered(MouseEvent e) {
+            @Override public void mouseEntered(MouseEvent e) {
                 if (wrapper != selectedCard) {
                     wrapper.setBackground(UiTheme.BG_HOVER);
                     content.setBackground(UiTheme.BG_HOVER);
                 }
             }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
+            @Override public void mouseExited(MouseEvent e) {
                 if (wrapper != selectedCard) {
                     wrapper.setBackground(UiTheme.BG_PANEL);
                     content.setBackground(UiTheme.BG_PANEL);
@@ -199,17 +210,20 @@ public class ProfileListPanel {
         return wrapper;
     }
 
-    private void selectCard(JPanel card, JPanel accentBar) {
-        // Deselect current
+    private void selectCard(JPanel card, JPanel accentBar, JPanel content) {
+        // Deselect previous selection
         if (selectedCard != null) {
             selectedCard.setBackground(UiTheme.BG_PANEL);
-            // Reset accent bar of old selection
-            Component westComp = ((BorderLayout) selectedCard.getLayout()).getLayoutComponent(BorderLayout.WEST);
-            if (westComp != null) westComp.setBackground(UiTheme.BG_PANEL);
+            BorderLayout bl = (BorderLayout) selectedCard.getLayout();
+            Component west = bl.getLayoutComponent(BorderLayout.WEST);
+            Component center = bl.getLayoutComponent(BorderLayout.CENTER);
+            if (west   != null) west.setBackground(UiTheme.BG_PANEL);
+            if (center instanceof JPanel p) p.setBackground(UiTheme.BG_PANEL);
         }
-        // Select new
+        // Apply new selection
         selectedCard = card;
         card.setBackground(UiTheme.BG_HOVER);
+        content.setBackground(UiTheme.BG_HOVER);
         accentBar.setBackground(UiTheme.TEXT_ACCENT);
     }
 

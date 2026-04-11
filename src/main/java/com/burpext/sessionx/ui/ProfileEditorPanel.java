@@ -102,31 +102,47 @@ public class ProfileEditorPanel {
     // =========================================================================
 
     private JPanel buildProfileHeader(SessionProfile profile) {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_SM, UiTheme.SP_SM));
+        JPanel bar = new JPanel(new GridBagLayout());
         bar.setBackground(UiTheme.BG_PANEL);
-        bar.setBorder(new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE));
+        bar.setBorder(BorderFactory.createCompoundBorder(
+            new MatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE),
+            new EmptyBorder(UiTheme.SP_SM, UiTheme.SP_LG, UiTheme.SP_SM, UiTheme.SP_LG)));
 
-        // Name field
-        bar.add(smallLabel("Name"));
-        profileNameField = compactField(profile.getName(), 180);
-        bar.add(profileNameField);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.anchor  = GridBagConstraints.CENTER;
+        gbc.fill    = GridBagConstraints.NONE;
+        gbc.gridy   = 0;
+        gbc.weighty = 1.0;
 
-        bar.add(spacer(UiTheme.SP_SM));
+        gbc.gridx = 0; gbc.insets = new Insets(0, 0, 0, UiTheme.SP_XS);
+        bar.add(smallLabel("Name"), gbc);
 
-        // Host field
-        bar.add(smallLabel("Host"));
-        targetHostField = compactField(profile.getTargetHost(), 150);
+        gbc.gridx = 1; gbc.insets = new Insets(0, 0, 0, UiTheme.SP_LG);
+        profileNameField = compactField(profile.getName(), 190);
+        bar.add(profileNameField, gbc);
+
+        gbc.gridx = 2; gbc.insets = new Insets(0, 0, 0, UiTheme.SP_XS);
+        bar.add(smallLabel("Host"), gbc);
+
+        gbc.gridx = 3; gbc.insets = new Insets(0, 0, 0, UiTheme.SP_LG);
+        targetHostField = compactField(profile.getTargetHost(), 160);
         targetHostField.setToolTipText("Display label e.g. api.target.com");
-        bar.add(targetHostField);
+        bar.add(targetHostField, gbc);
 
-        bar.add(spacer(UiTheme.SP_SM));
-
-        // Enabled toggle
+        gbc.gridx = 4; gbc.insets = new Insets(0, 0, 0, 0);
         enabledToggle = buildToggle(profile.isEnabled());
-        bar.add(enabledToggle);
+        bar.add(enabledToggle, gbc);
+
+        // Filler pushes everything to the left
+        gbc.gridx   = 5;
+        gbc.weightx = 1.0;
+        gbc.fill    = GridBagConstraints.HORIZONTAL;
+        gbc.insets  = new Insets(0, 0, 0, 0);
+        bar.add(new JLabel(), gbc);
 
         return bar;
     }
+
 
     private JToggleButton buildToggle(boolean on) {
         JToggleButton t = new JToggleButton(on ? "Active" : "Inactive", on) {
@@ -502,14 +518,17 @@ public class ProfileEditorPanel {
     private JPanel formRow(String labelText, JTextField field, String hint) {
         JPanel row = new JPanel(new BorderLayout(0, UiTheme.SP_XS));
         row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+        row.setPreferredSize(new Dimension(Integer.MAX_VALUE, 58));
 
         JLabel lbl = new JLabel(labelText);
         lbl.setFont(UiTheme.FONT_UI_SM);
         lbl.setForeground(UiTheme.TEXT_SECONDARY);
+        lbl.setPreferredSize(new Dimension(Integer.MAX_VALUE, 16));
         row.add(lbl, BorderLayout.NORTH);
 
         field.setToolTipText(hint);
+        field.setPreferredSize(new Dimension(Integer.MAX_VALUE, 30));
         row.add(field, BorderLayout.CENTER);
 
         return row;
