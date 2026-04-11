@@ -15,7 +15,9 @@ import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +65,9 @@ public class ProfileEditorPanel {
     private JTextField statusCodesField;
     private JTextField bodyKeywordField;
     private JTextField excludeUrlField;
+
+    // Keep a reference to the step table so interactive buttons can index into it
+    private JTable stepTable;
 
     public ProfileEditorPanel(MontoyaApi api, ProfileManager profileManager, TokenStore tokenStore) {
         this.api            = api;
@@ -166,28 +171,30 @@ public class ProfileEditorPanel {
         JPanel panel = tabPanel();
 
         JLabel hint = UiTheme.mutedLabel(
-            "Configure how each token is extracted from login responses and injected into requests.");
+            "Token extraction + injection config. Variable Name is the primary key (e.g. access_token). JSONPath takes priority over Regex for JSON bodies.");
         hint.setBorder(new EmptyBorder(0, 0, UiTheme.SP_SM, 0));
         panel.add(hint, BorderLayout.NORTH);
 
-        String[] cols = {"Type", "Extract From", "Regex (group 1)", "Step #", "Inject At", "Key / Header"};
+        String[] cols = {"Variable Name", "Type", "Extract From", "JSONPath", "Regex (fallback)", "Step #", "Inject At", "Key / Header"};
         tokenTableModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return true; }
         };
 
         for (TokenDefinition td : profile.getTokens()) {
             tokenTableModel.addRow(new Object[]{
-                td.getTokenType(), td.getExtractFrom(), td.getExtractRegex(),
+                td.getVariableName(),
+                td.getTokenType(), td.getExtractFrom(),
+                td.getExtractJsonPath(), td.getExtractRegex(),
                 td.getLoginStepIndex(), td.getInjectLocation(), td.getInjectKey()
             });
         }
 
         JTable table = buildTable(tokenTableModel);
-        setComboEditor(table, 0, TokenType.values());
-        setComboEditor(table, 1, ExtractSource.values());
-        setComboEditor(table, 4, TokenLocation.values());
-        setMonoColumns(table, new int[]{2, 5});
-        setColumnWidths(table, new int[]{110, 145, 200, 50, 160, 130});
+        setComboEditor(table, 1, TokenType.values());
+        setComboEditor(table, 2, ExtractSource.values());
+        setComboEditor(table, 6, TokenLocation.values());
+        setMonoColumns(table, new int[]{3, 4, 7});
+        setColumnWidths(table, new int[]{130, 100, 140, 175, 175, 50, 155, 120});
 
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
         panel.add(buildTableFooter(tokenTableModel, table), BorderLayout.SOUTH);
@@ -202,7 +209,8 @@ public class ProfileEditorPanel {
         JPanel panel = tabPanel();
 
         JLabel hint = UiTheme.mutedLabel(
-            "Steps execute top-to-bottom. Use {{step0:CSRF}} to reference tokens from prior steps.");
+            "Steps execute top-to-bottom. Use {{step0:varName}} to reference variables from prior steps.  " +
+            "Use  ⚡ Add Step  to build steps interactively.");
         hint.setBorder(new EmptyBorder(0, 0, UiTheme.SP_SM, 0));
         panel.add(hint, BorderLayout.NORTH);
 
@@ -218,14 +226,136 @@ public class ProfileEditorPanel {
             });
         }
 
-        JTable table = buildTable(stepTableModel);
-        setComboEditor(table, 1, new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"});
-        setMonoColumns(table, new int[]{2, 3});
-        setColumnWidths(table, new int[]{120, 68, 250, 210, 140});
+        stepTable = buildTable(stepTableModel);
+        setComboEditor(stepTable, 1, new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"});
+        setMonoColumns(stepTable, new int[]{2, 3});
+        setColumnWidths(stepTable, new int[]{120, 68, 250, 210, 140});
 
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
-        panel.add(buildTableFooter(stepTableModel, table), BorderLayout.SOUTH);
+        panel.add(new JScrollPane(stepTable), BorderLayout.CENTER);
+        panel.add(buildStepFooter(profile), BorderLayout.SOUTH);
         return panel;
+    }
+
+    private JPanel buildStepFooter(SessionProfile profile) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_SM, UiTheme.SP_SM));
+        row.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()));
+
+        // Interactive step builder
+        JButton addInteractive = UiTheme.button("⚡ Add Step (Interactive)");
+        addInteractive.setFont(UiTheme.FONT_BOLD);
+        addInteractive.setToolTipText("Open the step builder — send a request and click values to extract them");
+        addInteractive.addActionListener(e -> openStepBuilder(profile, -1));
+        row.add(addInteractive);
+
+        JButton editStep = UiTheme.smallButton("🔧 Edit Step", "Edit the selected step interactively");
+        editStep.addActionListener(e -> {
+            int sel = stepTable == null ? -1 : stepTable.getSelectedRow();
+            if (sel < 0) { showInfo("Select a step row to edit."); return; }
+            openStepBuilder(profile, sel);
+        });
+        row.add(editStep);
+
+        // Plain add/remove
+        JButton addBtn = UiTheme.smallButton("➕ Add Row", "Add a blank step row manually");
+        addBtn.addActionListener(e -> stepTableModel.addRow(new Object[stepTableModel.getColumnCount()]));
+        row.add(addBtn);
+
+        JButton removeBtn = UiTheme.smallButton("➖ Remove Row", "Remove selected step row");
+        removeBtn.addActionListener(e -> {
+            if (stepTable == null) return;
+            int sel = stepTable.getSelectedRow();
+            if (sel >= 0) stepTableModel.removeRow(sel);
+        });
+        row.add(removeBtn);
+
+        return row;
+    }
+
+    /**
+     * Opens the interactive LoginStepBuilderDialog for the given step index.
+     * @param profile  current profile
+     * @param stepIdx  -1 to add a new step, >=0 to edit an existing step
+     */
+    private void openStepBuilder(SessionProfile profile, int stepIdx) {
+        // Save current UI state so the dialog sees up-to-date token definitions
+        saveCurrentProfile();
+
+        boolean isNew = (stepIdx < 0);
+        int targetIdx = isNew ? profile.getLoginSteps().size() : stepIdx;
+
+        LoginStep preExisting = isNew ? null
+            : (stepIdx < profile.getLoginSteps().size() ? profile.getLoginSteps().get(stepIdx) : null);
+
+        // Collect token definitions already assigned to this step
+        List<TokenDefinition> stepTDs = new ArrayList<>();
+        for (TokenDefinition td : profile.getTokens()) {
+            if (td.getLoginStepIndex() == targetIdx) stepTDs.add(td);
+        }
+
+        // Collect variable names from prior steps for autocomplete
+        List<String> priorVars = new ArrayList<>();
+        for (TokenDefinition td : profile.getTokens()) {
+            if (td.getLoginStepIndex() < targetIdx) {
+                String key = td.effectiveKey();
+                if (!key.isBlank() && !priorVars.contains(key)) priorVars.add(key);
+            }
+        }
+
+        java.awt.Frame owner = javax.swing.SwingUtilities.getWindowAncestor(root) instanceof java.awt.Frame
+            ? (java.awt.Frame) javax.swing.SwingUtilities.getWindowAncestor(root) : null;
+
+        LoginStepBuilderDialog dialog = new LoginStepBuilderDialog(
+            owner, api, targetIdx, preExisting, stepTDs, priorVars);
+        dialog.setVisible(true);
+
+        if (!dialog.wasCommitted()) return;
+
+        LoginStep newStep = dialog.getResultStep();
+
+        if (isNew) {
+            // Append new step to model
+            String ct = newStep.getHeaders().getOrDefault("Content-Type", "");
+            stepTableModel.addRow(new Object[]{
+                newStep.getLabel(), newStep.getMethod(), newStep.getUrl(), newStep.getBody(), ct
+            });
+        } else {
+            // Update the existing row
+            String ct = newStep.getHeaders().getOrDefault("Content-Type", "");
+            stepTableModel.setValueAt(newStep.getLabel(),  stepIdx, 0);
+            stepTableModel.setValueAt(newStep.getMethod(), stepIdx, 1);
+            stepTableModel.setValueAt(newStep.getUrl(),    stepIdx, 2);
+            stepTableModel.setValueAt(newStep.getBody(),   stepIdx, 3);
+            stepTableModel.setValueAt(ct,                  stepIdx, 4);
+
+            // Remove old token definitions for this step, they'll be replaced
+            profile.getTokens().removeIf(td -> td.getLoginStepIndex() == targetIdx);
+        }
+
+        // Add returned token definitions to the profile and refresh the token table
+        for (TokenDefinition td : dialog.getResultTokens()) {
+            td.setLoginStepIndex(targetIdx);
+            profile.getTokens().add(td);
+        }
+
+        // Reload visible token table rows
+        refreshTokenTable(profile);
+
+        // Persist
+        profileManager.updateProfile(profile);
+        ActivityLogger.getInstance().info("Step " + (targetIdx + 1) + " configured via Step Builder.");
+    }
+
+    private void refreshTokenTable(SessionProfile profile) {
+        if (tokenTableModel == null) return;
+        tokenTableModel.setRowCount(0);
+        for (TokenDefinition td : profile.getTokens()) {
+            tokenTableModel.addRow(new Object[]{
+                td.getVariableName(),
+                td.getTokenType(), td.getExtractFrom(),
+                td.getExtractJsonPath(), td.getExtractRegex(),
+                td.getLoginStepIndex(), td.getInjectLocation(), td.getInjectKey()
+            });
+        }
     }
 
     // =========================================================================
@@ -518,17 +648,19 @@ public class ProfileEditorPanel {
         currentProfile.setTargetHost(targetHostField.getText().trim());
         currentProfile.setEnabled(enabledToggle.isSelected());
 
-        // Tokens
+        // Tokens  (columns: varName | type | extractFrom | jsonPath | regex | stepIdx | injectLoc | injectKey)
         List<TokenDefinition> tokens = new ArrayList<>();
         for (int i = 0; i < tokenTableModel.getRowCount(); i++) {
             TokenDefinition td = new TokenDefinition();
-            td.setTokenType(castEnum(tokenTableModel, i, 0, TokenType.class));
-            td.setExtractFrom(castEnum(tokenTableModel, i, 1, ExtractSource.class));
-            td.setExtractRegex(str(tokenTableModel.getValueAt(i, 2)));
-            try { td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 3)))); }
+            td.setVariableName(str(tokenTableModel.getValueAt(i, 0)));
+            td.setTokenType(castEnum(tokenTableModel, i, 1, TokenType.class));
+            td.setExtractFrom(castEnum(tokenTableModel, i, 2, ExtractSource.class));
+            td.setExtractJsonPath(str(tokenTableModel.getValueAt(i, 3)));
+            td.setExtractRegex(str(tokenTableModel.getValueAt(i, 4)));
+            try { td.setLoginStepIndex(Integer.parseInt(str(tokenTableModel.getValueAt(i, 5)))); }
             catch (NumberFormatException ignored) {}
-            td.setInjectLocation(castEnum(tokenTableModel, i, 4, TokenLocation.class));
-            td.setInjectKey(str(tokenTableModel.getValueAt(i, 5)));
+            td.setInjectLocation(castEnum(tokenTableModel, i, 6, TokenLocation.class));
+            td.setInjectKey(str(tokenTableModel.getValueAt(i, 7)));
             tokens.add(td);
         }
         currentProfile.setTokens(tokens);
@@ -585,6 +717,10 @@ public class ProfileEditorPanel {
             LoginExecutor exec = new LoginExecutor(api, tokenStore, ActivityLogger.getInstance());
             exec.execute(currentProfile);
         }, "sessionx-login").start();
+    }
+
+    private void showInfo(String msg) {
+        JOptionPane.showMessageDialog(root, msg, "SessionX", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void deleteCurrentProfile() {
