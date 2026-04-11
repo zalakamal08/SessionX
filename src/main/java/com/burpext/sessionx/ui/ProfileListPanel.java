@@ -33,7 +33,7 @@ public class ProfileListPanel {
         this.editorPanel    = editorPanel;
 
         root = new JPanel(new BorderLayout(0, 0));
-        root.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, UiTheme.BORDER));
+        root.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, UiTheme.getBorderColor()));
 
         // --- Header/toolbar (mirrors Postman2Burp CollectionTreePanel toolbar) ---
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
@@ -53,9 +53,9 @@ public class ProfileListPanel {
 
         // --- Footer: "New Profile" ---
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()));
 
-        JButton newBtn = UiTheme.smallButton("+ New Profile", "Create a new session profile");
+        JButton newBtn = UiTheme.smallButton("➕ New Profile", "Create a new session profile");
         newBtn.setFont(UiTheme.FONT_UI_SM);
         newBtn.setForeground(UiTheme.TEXT_ACCENT);
         newBtn.setFocusPainted(false);
@@ -91,7 +91,7 @@ public class ProfileListPanel {
         JPanel wrapper = new JPanel(new BorderLayout(0, 0));
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
         wrapper.setPreferredSize(new Dimension(Integer.MAX_VALUE, 50));
-        wrapper.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
+        wrapper.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.getBorderColor()));
 
         // Content: uses GridBagLayout for proper vertical centering
         JPanel content = new JPanel(new GridBagLayout());
@@ -133,7 +133,7 @@ public class ProfileListPanel {
         gbc.insets = new Insets(0, 0, 1, 0);
         JLabel nameLabel = new JLabel(profile.getName());
         nameLabel.setFont(UiTheme.FONT_BOLD);
-        nameLabel.setForeground(UiTheme.TEXT_PRIMARY);
+        nameLabel.setForeground(UiTheme.getPrimaryText());
         content.add(nameLabel, gbc);
 
         // Host sub-label
@@ -144,7 +144,7 @@ public class ProfileListPanel {
             ? "no host set" : profile.getTargetHost();
         JLabel hostLabel = new JLabel(hostText);
         hostLabel.setFont(UiTheme.FONT_UI_SM);
-        hostLabel.setForeground(UiTheme.TEXT_MUTED);
+        hostLabel.setForeground(UiTheme.getMutedText());
         content.add(hostLabel, gbc);
 
         wrapper.add(content, BorderLayout.CENTER);

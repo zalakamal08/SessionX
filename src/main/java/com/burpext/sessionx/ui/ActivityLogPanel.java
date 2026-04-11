@@ -36,23 +36,23 @@ public class ActivityLogPanel {
 
         // Toolbar -- same as Postman2Burp status bar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
-        toolbar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
+        toolbar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()));
 
         JLabel title = new JLabel("Activity Log");
         title.setFont(UiTheme.FONT_BOLD);
-        title.setForeground(UiTheme.TEXT_SECONDARY);
+        title.setForeground(UiTheme.getSecondaryText());
         toolbar.add(title);
 
         JSeparator sep = new JSeparator(JSeparator.VERTICAL);
         sep.setPreferredSize(new Dimension(1, 14));
-        sep.setForeground(UiTheme.BORDER);
+        sep.setForeground(UiTheme.getBorderColor());
         toolbar.add(sep);
 
-        JButton clearBtn = UiTheme.smallButton("Clear", "Clear log");
+        JButton clearBtn = UiTheme.smallButton("✕ Clear", "Clear log");
         clearBtn.addActionListener(e -> clearLog());
         toolbar.add(clearBtn);
 
-        JButton copyBtn = UiTheme.smallButton("Copy All", "Copy all log entries");
+        JButton copyBtn = UiTheme.smallButton("📋 Copy All", "Copy all log entries");
         copyBtn.addActionListener(e -> copyAll());
         toolbar.add(copyBtn);
 
@@ -84,7 +84,7 @@ public class ActivityLogPanel {
         if (entry.contains("[ERROR]"))   return UiTheme.STATUS_ERR;
         if (entry.contains("[SCOPE]"))   return UiTheme.TEXT_ACCENT;
         if (entry.contains("[WARN]"))    return UiTheme.STATUS_WARN;
-        return UiTheme.TEXT_SECONDARY;
+        return UiTheme.getSecondaryText();
     }
 
     private void clearLog() {

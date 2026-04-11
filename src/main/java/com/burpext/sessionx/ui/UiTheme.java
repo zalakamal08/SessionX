@@ -1,49 +1,29 @@
 package com.burpext.sessionx.ui;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
 /**
- * Lightweight, system-native design tokens for SessionX.
+ * Lightweight, dynamically theme-aware design tokens for SessionX.
  *
- * Inspired by Postman2Burp: no manual background colors, no dark theme.
- * Rely on the OS/Burp look-and-feel for surfaces; only override what is
- * strictly necessary for legibility (text on system defaults).
- *
- * Color rules:
- *   - Borders : Color(210,210,210) -- same as Postman2Burp toolbar border
- *   - Text primary   : Color(40,40,40)   -- near-black on white
- *   - Text secondary : Color(100,100,100)
- *   - Text muted     : Color(150,150,150)
- *   - Status ok      : Color(34,139,34)  -- forest green
- *   - Status err     : Color(180,40,40)  -- muted red
- *   - Status warn    : Color(180,120,0)  -- amber
- *   - Accent (links) : Color(50,100,200) -- calm blue, used for "+ New" text only
+ * Ensures Burp Suite's Dark Mode (Darcula) and Light Mode are respected
+ * automatically by querying UIManager for system colors.
  */
 public final class UiTheme {
 
-    // --- Borders ---
-    public static final Color BORDER = new Color(210, 210, 210);
-
-    // --- Text ---
-    public static final Color TEXT_PRIMARY   = new Color(40,  40,  40);
-    public static final Color TEXT_SECONDARY = new Color(100, 100, 100);
-    public static final Color TEXT_MUTED     = new Color(150, 150, 150);
-    public static final Color TEXT_ACCENT    = new Color(50,  100, 200);
-
     // --- Status indicators (functional, never decorative) ---
-    public static final Color STATUS_OK   = new Color(34,  139, 34);
-    public static final Color STATUS_OFF  = new Color(180, 180, 180);
-    public static final Color STATUS_ERR  = new Color(180, 40,  40);
-    public static final Color STATUS_WARN = new Color(180, 120, 0);
+    // These remain hardcoded as they represent distinct states independent of theme.
+    public static final Color STATUS_OK   = new Color(60, 160, 60);  // Green
+    public static final Color STATUS_OFF  = new Color(130, 130, 130); // Gray
+    public static final Color STATUS_ERR  = new Color(200, 60,  60);  // Red
+    public static final Color STATUS_WARN = new Color(200, 140, 0);   // Amber
 
-    // --- Typography -- matches Postman2Burp exactly ---
+    // --- Typography ---
     public static final Font FONT_BRAND  = new Font("SansSerif", Font.BOLD,  13);
     public static final Font FONT_UI     = new Font("SansSerif", Font.PLAIN, 12);
     public static final Font FONT_UI_SM  = new Font("SansSerif", Font.PLAIN, 11);
     public static final Font FONT_BOLD   = new Font("SansSerif", Font.BOLD,  12);
-    public static final Font FONT_LABEL  = new Font("SansSerif", Font.BOLD,  11);  // section caps
+    public static final Font FONT_LABEL  = new Font("SansSerif", Font.BOLD,  11);
     public static final Font FONT_ITALIC = new Font("SansSerif", Font.ITALIC,11);
     public static final Font FONT_MONO   = new Font("Monospaced", Font.PLAIN, 12);
     public static final Font FONT_MONO_SM= new Font("Monospaced", Font.PLAIN, 11);
@@ -57,55 +37,95 @@ public final class UiTheme {
     private UiTheme() {}
 
     // =========================================================================
-    // COMPONENT FACTORIES  (stock Swing, minimal overrides)
+    // DYNAMIC COLOR RESOLUTION
     // =========================================================================
 
-    /** Standard body label */
+    public static Color getPrimaryText() {
+        Color c = UIManager.getColor("Label.foreground");
+        return c != null ? c : new Color(40, 40, 40);
+    }
+
+    public static Color getSecondaryText() {
+        Color c = UIManager.getColor("textInactiveText");
+        if (c != null) return c;
+        // Fallback: blend primary with background
+        Color fg = getPrimaryText();
+        Color bg = getBackground();
+        return blend(fg, bg, 0.6f);
+    }
+
+    public static Color getMutedText() {
+        Color fg = getPrimaryText();
+        Color bg = getBackground();
+        return blend(fg, bg, 0.4f);
+    }
+
+    public static Color getBorderColor() {
+        Color c = UIManager.getColor("Component.borderColor");
+        if (c != null) return c;
+        c = UIManager.getColor("Separator.foreground");
+        if (c != null) return c;
+        // Fallback: slightly contrasted background
+        Color bg = getBackground();
+        return isDarkTheme() ? bg.brighter() : bg.darker();
+    }
+
+    public static Color getBackground() {
+        Color c = UIManager.getColor("Panel.background");
+        return c != null ? c : new Color(240, 240, 240);
+    }
+
+    public static boolean isDarkTheme() {
+        Color bg = getBackground();
+        // Standard perceived luminance formula
+        double luminance = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
+        return luminance < 0.5;
+    }
+
+    private static Color blend(Color c1, Color c2, float ratio) {
+        float r = (c1.getRed() * ratio) + (c2.getRed() * (1 - ratio));
+        float g = (c1.getGreen() * ratio) + (c2.getGreen() * (1 - ratio));
+        float b = (c1.getBlue() * ratio) + (c2.getBlue() * (1 - ratio));
+        return new Color((int)r, (int)g, (int)b);
+    }
+
+    // =========================================================================
+    // COMPONENT FACTORIES (Theme Aware)
+    // =========================================================================
+
     public static JLabel label(String text) {
         JLabel l = new JLabel(text);
         l.setFont(FONT_UI);
-        l.setForeground(TEXT_PRIMARY);
+        l.setForeground(getPrimaryText());
         return l;
     }
 
-    /** Small ALL-CAPS section divider label */
     public static JLabel sectionLabel(String text) {
         JLabel l = new JLabel(text.toUpperCase());
         l.setFont(FONT_LABEL);
-        l.setForeground(TEXT_SECONDARY);
+        l.setForeground(getSecondaryText());
         return l;
     }
 
-    /** Muted hint / placeholder text */
     public static JLabel mutedLabel(String text) {
         JLabel l = new JLabel(text);
         l.setFont(FONT_UI_SM);
-        l.setForeground(TEXT_MUTED);
+        l.setForeground(getMutedText());
         return l;
     }
 
-    /**
-     * Standard text field — let the system L&F control the background.
-     * Only override font and a simple lineBorder to match Postman2Burp.
-     */
     public static JTextField textField() {
         JTextField f = new JTextField();
         f.setFont(FONT_UI);
-        f.setForeground(TEXT_PRIMARY);
         return f;
     }
 
-    /** Monospace field (regex, URL, key paths) */
     public static JTextField monoField() {
         JTextField f = textField();
         f.setFont(FONT_MONO);
         return f;
     }
 
-    /**
-     * Standard toolbar button — same style as Postman2Burp's toolbarButton().
-     * No fill override; let the L&F paint the button normally.
-     */
     public static JButton button(String text) {
         JButton b = new JButton(text);
         b.setFont(FONT_UI);
@@ -113,24 +133,21 @@ public final class UiTheme {
         return b;
     }
 
-    /** Small utility button (tree toolbar style) */
     public static JButton smallButton(String text, String tooltip) {
         JButton b = new JButton(text);
         b.setToolTipText(tooltip);
         b.setFont(FONT_UI_SM);
         b.setFocusPainted(false);
-        b.setMargin(new Insets(1, 5, 1, 5));
+        b.setMargin(new Insets(1, 4, 1, 4));
         return b;
     }
 
-    /** Thin horizontal line divider */
     public static JSeparator separator() {
         JSeparator s = new JSeparator();
-        s.setForeground(BORDER);
+        s.setForeground(getBorderColor());
         return s;
     }
 
-    /** Combo box — system default, just font override */
     public static <T> JComboBox<T> comboBox() {
         JComboBox<T> c = new JComboBox<>();
         c.setFont(FONT_UI);

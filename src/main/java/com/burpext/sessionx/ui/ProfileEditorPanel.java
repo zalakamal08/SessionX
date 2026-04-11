@@ -99,7 +99,7 @@ public class ProfileEditorPanel {
     private JPanel buildProfileHeader(SessionProfile profile) {
         JPanel bar = new JPanel(new GridBagLayout());
         bar.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER),
+            BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.getBorderColor()),
             new EmptyBorder(UiTheme.SP_SM, UiTheme.SP_LG, UiTheme.SP_SM, UiTheme.SP_LG)));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -128,11 +128,11 @@ public class ProfileEditorPanel {
             profile.isEnabled() ? "Active" : "Inactive", profile.isEnabled());
         enabledToggle.setFont(UiTheme.FONT_UI_SM);
         enabledToggle.setFocusPainted(false);
-        enabledToggle.setForeground(profile.isEnabled() ? UiTheme.STATUS_OK : UiTheme.TEXT_MUTED);
+        enabledToggle.setForeground(profile.isEnabled() ? UiTheme.STATUS_OK : UiTheme.getMutedText());
         enabledToggle.addActionListener(e -> {
             enabledToggle.setText(enabledToggle.isSelected() ? "Active" : "Inactive");
             enabledToggle.setForeground(
-                enabledToggle.isSelected() ? UiTheme.STATUS_OK : UiTheme.TEXT_MUTED);
+                enabledToggle.isSelected() ? UiTheme.STATUS_OK : UiTheme.getMutedText());
         });
         bar.add(enabledToggle, gbc);
 
@@ -335,37 +335,37 @@ public class ProfileEditorPanel {
 
     private JPanel buildActionBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 5));
-        bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
+        bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()));
 
-        JButton saveBtn = UiTheme.button("Save");
+        JButton saveBtn = UiTheme.button("💾 Save");
         saveBtn.setFont(UiTheme.FONT_BOLD);
         saveBtn.addActionListener(e -> saveCurrentProfile());
         bar.add(saveBtn);
 
-        JButton runBtn = UiTheme.button("Run Login Now");
+        JButton runBtn = UiTheme.button("▶ Run Login");
         runBtn.setToolTipText("Manually trigger the login sequence to populate tokens");
         runBtn.addActionListener(e -> runLoginNow());
         bar.add(runBtn);
 
         JSeparator sep = new JSeparator(JSeparator.VERTICAL);
         sep.setPreferredSize(new Dimension(1, 16));
-        sep.setForeground(UiTheme.BORDER);
+        sep.setForeground(UiTheme.getBorderColor());
         bar.add(sep);
 
-        JButton exportBtn = UiTheme.button("Export JSON");
+        JButton exportBtn = UiTheme.button("📤 Export");
         exportBtn.addActionListener(e -> exportProfile());
         bar.add(exportBtn);
 
-        JButton importBtn = UiTheme.button("Import JSON");
+        JButton importBtn = UiTheme.button("📥 Import");
         importBtn.addActionListener(e -> importProfile());
         bar.add(importBtn);
 
         JSeparator sep2 = new JSeparator(JSeparator.VERTICAL);
         sep2.setPreferredSize(new Dimension(1, 16));
-        sep2.setForeground(UiTheme.BORDER);
+        sep2.setForeground(UiTheme.getBorderColor());
         bar.add(sep2);
 
-        JButton deleteBtn = UiTheme.button("Delete Profile");
+        JButton deleteBtn = UiTheme.button("🗑 Delete");
         deleteBtn.setForeground(UiTheme.STATUS_ERR);
         deleteBtn.addActionListener(e -> deleteCurrentProfile());
         bar.add(deleteBtn);
@@ -379,13 +379,13 @@ public class ProfileEditorPanel {
 
     private JPanel buildTableFooter(DefaultTableModel model, JTable table) {
         JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_SM, UiTheme.SP_SM));
-        row.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
+        row.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()));
 
-        JButton addBtn = UiTheme.smallButton("+ Add Row", "Add a new row");
+        JButton addBtn = UiTheme.smallButton("➕ Add Row", "Add a new row");
         addBtn.addActionListener(e -> model.addRow(new Object[model.getColumnCount()]));
         row.add(addBtn);
 
-        JButton removeBtn = UiTheme.smallButton("Remove Row", "Remove selected row");
+        JButton removeBtn = UiTheme.smallButton("➖ Remove Row", "Remove selected row");
         removeBtn.addActionListener(e -> {
             int sel = table.getSelectedRow();
             if (sel >= 0) model.removeRow(sel);
@@ -396,9 +396,28 @@ public class ProfileEditorPanel {
     }
 
     private JTable buildTable(DefaultTableModel model) {
-        JTable table = new JTable(model);
+        JTable table = new JTable(model) {
+            @Override
+            public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
+                Component c = super.prepareRenderer(renderer, row, column);
+                if (!isRowSelected(row)) {
+                    Color bg = getBackground();
+                    if (row % 2 != 0) {
+                        // Alternate row styling dynamically derived from current theme background
+                        c.setBackground(UiTheme.isDarkTheme() ? bg.brighter() : new Color(
+                            Math.max(0, bg.getRed() - 10),
+                            Math.max(0, bg.getGreen() - 10),
+                            Math.max(0, bg.getBlue() - 10)
+                        ));
+                    } else {
+                        c.setBackground(bg);
+                    }
+                }
+                return c;
+            }
+        };
         table.setFont(UiTheme.FONT_UI);
-        table.setGridColor(UiTheme.BORDER);
+        table.setGridColor(UiTheme.getBorderColor());
         table.setRowHeight(26);
         table.setShowHorizontalLines(true);
         table.setShowVerticalLines(false);
@@ -462,7 +481,7 @@ public class ProfileEditorPanel {
         row.add(lbl, BorderLayout.WEST);
 
         JSeparator line = new JSeparator();
-        line.setForeground(UiTheme.BORDER);
+        line.setForeground(UiTheme.getBorderColor());
         row.add(line, BorderLayout.CENTER);
 
         return row;

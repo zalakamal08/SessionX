@@ -48,24 +48,24 @@ public class SessionXTab {
 
     private JPanel buildToolbar(ProfileManager profileManager) {
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 5));
-        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
+        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.getBorderColor()));
 
         // Brand
         JLabel brand = new JLabel("SessionX");
         brand.setFont(UiTheme.FONT_BRAND);
-        brand.setForeground(UiTheme.TEXT_PRIMARY);
+        brand.setForeground(UiTheme.getPrimaryText());
         toolbar.add(brand);
 
         // Vertical separator
         JSeparator sep = new JSeparator(JSeparator.VERTICAL);
         sep.setPreferredSize(new Dimension(1, 20));
-        sep.setForeground(UiTheme.BORDER);
+        sep.setForeground(UiTheme.getBorderColor());
         toolbar.add(sep);
 
         // Subtitle
         JLabel subtitle = new JLabel("Session Token Manager");
         subtitle.setFont(UiTheme.FONT_ITALIC);
-        subtitle.setForeground(UiTheme.TEXT_MUTED);
+        subtitle.setForeground(UiTheme.getMutedText());
         toolbar.add(subtitle);
 
         return toolbar;
