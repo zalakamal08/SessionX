@@ -5,6 +5,7 @@ import com.burpext.sessionx.engine.LoginExecutor;
 import com.burpext.sessionx.engine.ProfileManager;
 import com.burpext.sessionx.engine.TokenStore;
 import com.burpext.sessionx.util.ActivityLogger;
+import com.burpext.sessionx.util.PostmanImportUtil;
 import burp.api.montoya.MontoyaApi;
 
 import javax.swing.*;
@@ -254,6 +255,32 @@ public class ProfileEditorPanel {
             openStepBuilder(profile, sel);
         });
         row.add(editStep);
+
+        JButton importPostman = UiTheme.smallButton("📥 Import Postman", "Import steps directly from a Postman Collection JSON file.");
+        importPostman.addActionListener(e -> {
+            JFileChooser jfc = new JFileChooser(".");
+            jfc.setDialogTitle("Select Postman Collection JSON");
+            jfc.setFileFilter(new FileNameExtensionFilter("JSON Files", "json"));
+            if (jfc.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                try {
+                    List<LoginStep> imported = PostmanImportUtil.parse(jfc.getSelectedFile());
+                    if (imported != null && !imported.isEmpty()) {
+                        for (LoginStep s : imported) {
+                            String ct = s.getHeaders().getOrDefault("Content-Type", "");
+                            stepTableModel.addRow(new Object[]{
+                                s.getLabel(), s.getMethod(), s.getUrl(), s.getBody(), ct
+                            });
+                        }
+                        showInfo("Successfully imported " + imported.size() + " request steps from Postman collection!");
+                    } else {
+                        showInfo("No valid requests found in the selected Postman collection.");
+                    }
+                } catch (Exception ex) {
+                    showInfo("Failed to parse Postman collection: " + ex.getMessage());
+                }
+            }
+        });
+        row.add(importPostman);
 
         // Plain add/remove
         JButton addBtn = UiTheme.smallButton("➕ Add Row", "Add a blank step row manually");
