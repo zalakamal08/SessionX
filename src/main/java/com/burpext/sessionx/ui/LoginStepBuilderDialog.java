@@ -11,6 +11,7 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.text.DefaultHighlighter;
 import java.awt.*;
@@ -152,7 +153,7 @@ public class LoginStepBuilderDialog extends JDialog {
         JPanel labelRow = new JPanel(new BorderLayout(4, 0));
         JLabel lbl = new JLabel("Label:");
         lbl.setFont(UiTheme.FONT_UI_SM);
-        lbl.setForeground(UiTheme.TEXT_SECONDARY);
+        lbl.setForeground(UiTheme.getSecondaryText());
         lbl.setPreferredSize(new Dimension(50, 24));
         labelField = UiTheme.textField();
         labelRow.add(lbl, BorderLayout.WEST);
@@ -680,7 +681,7 @@ public class LoginStepBuilderDialog extends JDialog {
         sp.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.getBorderColor()),
             title, TitledBorder.LEFT, TitledBorder.TOP,
-            UiTheme.FONT_UI_SM, UiTheme.TEXT_SECONDARY));
+            UiTheme.FONT_UI_SM, UiTheme.getSecondaryText()));
         return sp;
     }
 
@@ -702,7 +703,7 @@ public class LoginStepBuilderDialog extends JDialog {
         gc.gridx = 0; gc.weightx = 0;
         JLabel l = new JLabel(labelText);
         l.setFont(UiTheme.FONT_UI_SM);
-        l.setForeground(UiTheme.TEXT_SECONDARY);
+        l.setForeground(UiTheme.getSecondaryText());
         p.add(l, gc);
         gc.gridx = 1; gc.weightx = 1.0;
         p.add(field, gc);

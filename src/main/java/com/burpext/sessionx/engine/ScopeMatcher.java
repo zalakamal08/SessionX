@@ -16,7 +16,7 @@ import java.util.regex.PatternSyntaxException;
  * Pattern syntax: '*' is a wildcard matching any character sequence.
  * Examples:
  *   *.target.com/api/*   - all API paths on any subdomain
- *   192.168.1.*/admin/*  - admin panel on any 192.168.1.x host
+ *   192.168.1.* /admin/* - admin panel on any 192.168.1.x host
  *
  * FIX #4 (Regex Injection / Crash):
  *   - User-supplied glob patterns are now split on '*', each literal segment

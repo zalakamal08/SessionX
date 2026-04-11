@@ -57,7 +57,7 @@ public class ProfileListPanel {
 
         JButton newBtn = UiTheme.smallButton("➕ New Profile", "Create a new session profile");
         newBtn.setFont(UiTheme.FONT_UI_SM);
-        newBtn.setForeground(UiTheme.TEXT_ACCENT);
+        newBtn.setForeground(UiTheme.getAccentColor());
         newBtn.setFocusPainted(false);
         newBtn.setBorderPainted(false);
         newBtn.setContentAreaFilled(false);

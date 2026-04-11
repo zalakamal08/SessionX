@@ -592,7 +592,7 @@ public class ProfileEditorPanel {
 
         JLabel lbl = new JLabel(labelText);
         lbl.setFont(UiTheme.FONT_UI_SM);
-        lbl.setForeground(UiTheme.TEXT_SECONDARY);
+        lbl.setForeground(UiTheme.getSecondaryText());
         row.add(lbl, BorderLayout.NORTH);
 
         field.setToolTipText(hint);
@@ -620,7 +620,7 @@ public class ProfileEditorPanel {
     private JLabel headerLabel(String text) {
         JLabel l = new JLabel(text);
         l.setFont(UiTheme.FONT_UI_SM);
-        l.setForeground(UiTheme.TEXT_SECONDARY);
+        l.setForeground(UiTheme.getSecondaryText());
         return l;
     }
 

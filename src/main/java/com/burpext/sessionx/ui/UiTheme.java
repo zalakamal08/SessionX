@@ -60,6 +60,14 @@ public final class UiTheme {
         return blend(fg, bg, 0.4f);
     }
 
+    public static Color getAccentColor() {
+        Color c = UIManager.getColor("Component.focusColor");
+        if (c != null) return c;
+        c = UIManager.getColor("textHighlight");
+        if (c != null) return c;
+        return new Color(0, 120, 215); // Default blue
+    }
+
     public static Color getBorderColor() {
         Color c = UIManager.getColor("Component.borderColor");
         if (c != null) return c;

@@ -82,7 +82,7 @@ public class ActivityLogPanel {
         if (entry.contains("[TOKEN]"))   return UiTheme.STATUS_OK;
         if (entry.contains("[REFRESH]")) return UiTheme.STATUS_WARN;
         if (entry.contains("[ERROR]"))   return UiTheme.STATUS_ERR;
-        if (entry.contains("[SCOPE]"))   return UiTheme.TEXT_ACCENT;
+        if (entry.contains("[SCOPE]"))   return UiTheme.getAccentColor();
         if (entry.contains("[WARN]"))    return UiTheme.STATUS_WARN;
         return UiTheme.getSecondaryText();
     }
