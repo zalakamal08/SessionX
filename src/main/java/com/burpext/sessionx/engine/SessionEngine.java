@@ -40,17 +40,18 @@ public class SessionEngine implements HttpHandler {
 
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent requestToBeSent) {
+        // Fast-path: skip all processing if no profiles are active
+        java.util.List<SessionProfile> enabled = profileManager.getEnabledProfiles();
+        if (enabled.isEmpty()) return RequestToBeSentAction.continueWith(requestToBeSent);
+
         HttpRequest request = requestToBeSent;
         String url = requestToBeSent.url();
 
-        for (SessionProfile profile : profileManager.getEnabledProfiles()) {
+        for (SessionProfile profile : enabled) {
             // 1. Check scope
-            if (!ScopeMatcher.shouldProcess(url, profile.getScope())) {
-                logger.scope("Skipped " + url + " - not in scope for \"" + profile.getName() + "\"");
-                continue;
-            }
+            if (!ScopeMatcher.shouldProcess(url, profile.getScope())) continue;
 
-            // 2. Skip the refresh endpoint to prevent loops
+            // 2. Skip the login/refresh endpoint to prevent infinite loops
             String excludeUrl = profile.getErrorCondition().getRefreshExcludeUrl();
             if (excludeUrl != null && !excludeUrl.isBlank() && url.contains(excludeUrl)) {
                 logger.scope("Skipped injection for refresh endpoint: " + url);
@@ -61,7 +62,6 @@ public class SessionEngine implements HttpHandler {
             for (TokenDefinition td : profile.getTokens()) {
                 String tokenValue = tokenStore.getToken(profile.getId(), td.getTokenType());
                 if (tokenValue == null || tokenValue.isBlank()) continue;
-
                 request = injectToken(request, td, tokenValue);
             }
         }
@@ -73,11 +73,15 @@ public class SessionEngine implements HttpHandler {
 
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
+        // Fast-path: skip all processing if no profiles are active
+        java.util.List<SessionProfile> enabled = profileManager.getEnabledProfiles();
+        if (enabled.isEmpty()) return ResponseReceivedAction.continueWith(responseReceived);
+
         int    statusCode = responseReceived.statusCode();
         String url        = responseReceived.initiatingRequest().url();
         String body       = responseReceived.bodyToString();
 
-        for (SessionProfile profile : profileManager.getEnabledProfiles()) {
+        for (SessionProfile profile : enabled) {
             if (!ScopeMatcher.shouldProcess(url, profile.getScope())) continue;
 
             ErrorCondition ec = profile.getErrorCondition();
@@ -97,18 +101,20 @@ public class SessionEngine implements HttpHandler {
         String key = td.getInjectKey();
         try {
             return switch (td.getInjectLocation()) {
+                // FIX #3: Use withUpdatedHeader() not withHeader() to REPLACE
+                // any existing header value rather than appending a duplicate.
                 case AUTHORIZATION_HEADER ->
-                    request.withHeader("Authorization", "Bearer " + value);
+                    request.withUpdatedHeader("Authorization", "Bearer " + value);
 
                 case CUSTOM_HEADER ->
-                    request.withHeader(key, value);
+                    request.withUpdatedHeader(key, value);
 
                 case COOKIE -> {
+                    // For cookies, parse and replace the specific key only,
+                    // preserving all other cookies intact.
                     String existing = request.headerValue("Cookie");
-                    String newCookie = (existing == null || existing.isBlank())
-                        ? key + "=" + value
-                        : existing + "; " + key + "=" + value;
-                    yield request.withHeader("Cookie", newCookie);
+                    String newCookie = mergeCookie(existing, key, value);
+                    yield request.withUpdatedHeader("Cookie", newCookie);
                 }
 
                 case BODY_JSON -> {
@@ -126,12 +132,40 @@ public class SessionEngine implements HttpHandler {
                 case QUERY_PARAM -> {
                     String currentPath = request.path();
                     String separator   = currentPath.contains("?") ? "&" : "?";
-                    yield request.withPath(currentPath + separator + key + "=" + value);
+                    yield request.withPath(currentPath + separator
+                        + java.net.URLEncoder.encode(key,   java.nio.charset.StandardCharsets.UTF_8)
+                        + "="
+                        + java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8));
                 }
             };
         } catch (Exception e) {
             logger.error("Token injection failed [" + td.getTokenType() + "]: " + e.getMessage());
-            return request;
+            return request; // fail-safe: return original request unmodified
         }
+    }
+
+    /**
+     * Merges a single cookie key=value into an existing Cookie header string,
+     * replacing the existing value if the key is already present.
+     * Preserves all other cookies intact.
+     */
+    private static String mergeCookie(String existing, String key, String value) {
+        String newPair = key + "=" + value;
+        if (existing == null || existing.isBlank()) return newPair;
+
+        StringBuilder result = new StringBuilder();
+        boolean replaced = false;
+        for (String part : existing.split(";")) {
+            String trimmed = part.trim();
+            if (result.length() > 0) result.append("; ");
+            if (trimmed.startsWith(key + "=") || trimmed.equals(key)) {
+                result.append(newPair);
+                replaced = true;
+            } else {
+                result.append(trimmed);
+            }
+        }
+        if (!replaced) result.append("; ").append(newPair);
+        return result.toString();
     }
 }
