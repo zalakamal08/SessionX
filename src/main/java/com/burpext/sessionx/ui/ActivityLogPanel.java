@@ -4,72 +4,65 @@ import com.burpext.sessionx.util.ActivityLogger;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.MatteBorder;
 import javax.swing.text.*;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 
 /**
- * Activity log strip at the bottom of the extension tab.
+ * Activity log at the bottom -- mirrors Postman2Burp's status bar style.
  *
- * Design intent:
- *   - Terminal-like, but clean — no "hacker" chrome
- *   - Monospace text, subtle colors for log levels
- *   - LOG LEVEL colors are strictly functional (green=good, red=error, etc.)
- *     but the surrounding chrome is neutral
- *   - Auto-scrolls to latest entry
+ * Design:
+ *   - Thin top border (same as Postman2Burp status bar bottom border)
+ *   - SansSerif italic footnote text style for idle state
+ *   - Log area uses system default background; monospaced text
+ *   - Colors: only text-level coloring for log level (green/red/amber/blue)
+ *     on system-default background -- no panel coloring
  */
 public class ActivityLogPanel {
 
-    private final JPanel     root;
-    private final JTextPane  logPane;
+    private final JPanel    root;
+    private final JTextPane logPane;
     private final StyledDocument doc;
 
     public ActivityLogPanel() {
         logPane = new JTextPane();
         logPane.setEditable(false);
-        logPane.setBackground(UiTheme.BG_BASE);
         logPane.setFont(UiTheme.FONT_MONO_SM);
         logPane.setBorder(new EmptyBorder(UiTheme.SP_SM, UiTheme.SP_MD, UiTheme.SP_SM, UiTheme.SP_MD));
         doc = logPane.getStyledDocument();
 
         JScrollPane scroll = new JScrollPane(logPane);
         scroll.setBorder(null);
-        scroll.setBackground(UiTheme.BG_BASE);
-        scroll.getViewport().setBackground(UiTheme.BG_BASE);
 
-        // Toolbar
-        JPanel toolbar = new JPanel(new BorderLayout());
-        toolbar.setBackground(UiTheme.BG_PANEL);
-        toolbar.setBorder(new MatteBorder(1, 0, 0, 0, UiTheme.BORDER_SUBTLE));
+        // Toolbar -- same as Postman2Burp status bar
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
+        toolbar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UiTheme.BORDER));
 
-        JLabel title = UiTheme.sectionLabel("Activity Log");
-        title.setBorder(new EmptyBorder(UiTheme.SP_SM, UiTheme.SP_MD, UiTheme.SP_SM, 0));
-        toolbar.add(title, BorderLayout.WEST);
+        JLabel title = new JLabel("Activity Log");
+        title.setFont(UiTheme.FONT_BOLD);
+        title.setForeground(UiTheme.TEXT_SECONDARY);
+        toolbar.add(title);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_SM, 4));
-        actions.setOpaque(false);
+        JSeparator sep = new JSeparator(JSeparator.VERTICAL);
+        sep.setPreferredSize(new Dimension(1, 14));
+        sep.setForeground(UiTheme.BORDER);
+        toolbar.add(sep);
 
-        JButton copyBtn = UiTheme.button("Copy All");
-        copyBtn.addActionListener(e -> copyAll());
-        actions.add(copyBtn);
-
-        JButton clearBtn = UiTheme.button("Clear");
+        JButton clearBtn = UiTheme.smallButton("Clear", "Clear log");
         clearBtn.addActionListener(e -> clearLog());
-        actions.add(clearBtn);
+        toolbar.add(clearBtn);
 
-        toolbar.add(actions, BorderLayout.EAST);
+        JButton copyBtn = UiTheme.smallButton("Copy All", "Copy all log entries");
+        copyBtn.addActionListener(e -> copyAll());
+        toolbar.add(copyBtn);
 
         root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(UiTheme.BG_BASE);
-        root.setPreferredSize(new Dimension(0, 160));
+        root.setPreferredSize(new Dimension(0, 150));
         root.add(toolbar, BorderLayout.NORTH);
-        root.add(scroll, BorderLayout.CENTER);
+        root.add(scroll,  BorderLayout.CENTER);
 
         ActivityLogger.getInstance().addListener(this::appendEntry);
     }
-
-    // --- Rendering ---
 
     private void appendEntry(String entry) {
         SwingUtilities.invokeLater(() -> {
@@ -84,18 +77,19 @@ public class ActivityLogPanel {
         });
     }
 
-    // Log level -> color mapping (functional, not decorative)
+    /** Colors are strictly for log-level readability, not decoration */
     private Color colorFor(String entry) {
         if (entry.contains("[TOKEN]"))   return UiTheme.STATUS_OK;
         if (entry.contains("[REFRESH]")) return UiTheme.STATUS_WARN;
         if (entry.contains("[ERROR]"))   return UiTheme.STATUS_ERR;
         if (entry.contains("[SCOPE]"))   return UiTheme.TEXT_ACCENT;
         if (entry.contains("[WARN]"))    return UiTheme.STATUS_WARN;
-        return UiTheme.TEXT_SECONDARY;   // [INFO] — default
+        return UiTheme.TEXT_SECONDARY;
     }
 
     private void clearLog() {
-        try { doc.remove(0, doc.getLength()); } catch (BadLocationException ignored) {}
+        try { doc.remove(0, doc.getLength()); }
+        catch (BadLocationException ignored) {}
     }
 
     private void copyAll() {

@@ -12,16 +12,10 @@ import java.awt.*;
 /**
  * Root panel for the SessionX Burp Suite tab.
  *
- * Layout:
- *   +------------------------------------------+
- *   | [Header bar — brand + status]             |
- *   +-----------+------------------------------+
- *   | [Profile  | [Profile Editor — tabbed]    |
- *   |  Sidebar] |                              |
- *   |           |                              |
- *   +-----------+------------------------------+
- *   | [Activity Log — collapsible bottom strip] |
- *   +------------------------------------------+
+ * Matches Postman2Burp layout pattern:
+ *   - Toolbar at NORTH with brand label + action buttons
+ *   - Horizontal split: profile sidebar (left) + editor (right)
+ *   - Activity log strip (status bar) at SOUTH
  */
 public class SessionXTab {
 
@@ -29,88 +23,52 @@ public class SessionXTab {
 
     public SessionXTab(MontoyaApi api, ProfileManager profileManager, TokenStore tokenStore) {
         root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(UiTheme.BG_BASE);
 
-        ActivityLogPanel logPanel    = new ActivityLogPanel();
+        ActivityLogPanel   logPanel    = new ActivityLogPanel();
         ProfileEditorPanel editorPanel = new ProfileEditorPanel(api, profileManager, tokenStore);
         ProfileListPanel   listPanel   = new ProfileListPanel(profileManager, editorPanel);
 
-        // Header
-        root.add(buildHeader(profileManager), BorderLayout.NORTH);
+        root.add(buildToolbar(profileManager), BorderLayout.NORTH);
 
-        // Main horizontal split
-        JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
             listPanel.getPanel(), editorPanel.getPanel());
-        mainSplit.setDividerLocation(220);
-        mainSplit.setDividerSize(1);
-        mainSplit.setResizeWeight(0.0);
-        mainSplit.setBorder(null);
-        mainSplit.setBackground(UiTheme.BG_BASE);
+        split.setDividerLocation(230);
+        split.setDividerSize(4);
+        split.setResizeWeight(0.25);
+        split.setBorder(null);
+        root.add(split, BorderLayout.CENTER);
 
-        // Vertical split: editor above, log below
-        JSplitPane vertSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            mainSplit, logPanel.getPanel());
-        vertSplit.setResizeWeight(0.70);
-        vertSplit.setDividerSize(1);
-        vertSplit.setBorder(null);
-        vertSplit.setBackground(UiTheme.BG_BASE);
-
-        root.add(vertSplit, BorderLayout.CENTER);
+        root.add(logPanel.getPanel(), BorderLayout.SOUTH);
 
         ActivityLogger.getInstance().info("SessionX ready  -  "
             + profileManager.getAllProfiles().size() + " profile(s) loaded");
     }
 
-    private JPanel buildHeader(ProfileManager profileManager) {
-        JPanel bar = new JPanel(new BorderLayout());
-        bar.setBackground(UiTheme.BG_PANEL);
-        bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER_SUBTLE));
-        bar.setPreferredSize(new Dimension(0, 42));
+    // --- Toolbar (mirrors Postman2Burp.buildToolbar() style) ---
 
-        // Left: brand
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, UiTheme.SP_LG, 0));
-        left.setOpaque(false);
+    private JPanel buildToolbar(ProfileManager profileManager) {
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 5));
+        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER));
 
+        // Brand
         JLabel brand = new JLabel("SessionX");
-        brand.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        brand.setFont(UiTheme.FONT_BRAND);
         brand.setForeground(UiTheme.TEXT_PRIMARY);
-        left.add(brand);
+        toolbar.add(brand);
 
-        JLabel sep = new JLabel("|");
-        sep.setFont(UiTheme.FONT_UI_MED);
-        sep.setForeground(UiTheme.BORDER_STRONG);
-        left.add(sep);
+        // Vertical separator
+        JSeparator sep = new JSeparator(JSeparator.VERTICAL);
+        sep.setPreferredSize(new Dimension(1, 20));
+        sep.setForeground(UiTheme.BORDER);
+        toolbar.add(sep);
 
-        JLabel subtitle = new JLabel("Session Token Manager  for Burp Suite");
-        subtitle.setFont(UiTheme.FONT_UI_SM);
+        // Subtitle
+        JLabel subtitle = new JLabel("Session Token Manager");
+        subtitle.setFont(UiTheme.FONT_ITALIC);
         subtitle.setForeground(UiTheme.TEXT_MUTED);
-        left.add(subtitle);
+        toolbar.add(subtitle);
 
-        // Right: version badge
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiTheme.SP_LG, 0));
-        right.setOpaque(false);
-
-        JLabel version = new JLabel("v1.0");
-        version.setFont(UiTheme.FONT_UI_SM);
-        version.setForeground(UiTheme.TEXT_MUTED);
-        right.add(version);
-
-        bar.add(left, BorderLayout.WEST);
-        bar.add(right, BorderLayout.EAST);
-
-        // Vertically center children
-        bar.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentResized(java.awt.event.ComponentEvent e) {
-                int h = bar.getHeight();
-                ((FlowLayout) left.getLayout()).setVgap((h - 22) / 2);
-                ((FlowLayout) right.getLayout()).setVgap((h - 22) / 2);
-                left.revalidate();
-                right.revalidate();
-            }
-        });
-
-        return bar;
+        return toolbar;
     }
 
     public JPanel getPanel() { return root; }
