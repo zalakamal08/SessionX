@@ -22,11 +22,8 @@ import java.util.concurrent.Executors;
  * For each request:
  *  1. Let the original request pass through normally (handled by Burp).
  *  2. In a background thread, modify the request headers per the active rules.
- *  3. Fire the modified request and capture the response.
+ *  3. Fire the modified request and unauthenticated request concurrently.
  *  4. Post the comparison result to the table model.
- *
- * Note: we intentionally do NOT block the proxy thread (requestToBeSent returns
- * immediately). The modified replay is async via an ExecutorService.
  */
 public class RequestReplayer implements HttpHandler {
 
@@ -34,7 +31,7 @@ public class RequestReplayer implements HttpHandler {
     private final TestResultTableModel   tableModel;
     private final List<HeaderRule>       rules;
 
-    private volatile boolean active           = false;
+    private volatile boolean interceptProxy    = false;
     private volatile boolean interceptRepeater = false;
 
     // Background thread pool for replaying requests
@@ -48,9 +45,10 @@ public class RequestReplayer implements HttpHandler {
 
     // ─── State control ────────────────────────────────────────────────────────
 
-    public void setActive(boolean active)            { this.active = active; }
-    public boolean isActive()                        { return active; }
-    public void setInterceptRepeater(boolean v)      { this.interceptRepeater = v; }
+    public void setInterceptProxy(boolean v)    { this.interceptProxy = v; }
+    public boolean isInterceptProxy()           { return interceptProxy; }
+    public void setInterceptRepeater(boolean v) { this.interceptRepeater = v; }
+    public boolean isInterceptRepeater()        { return interceptRepeater; }
 
     /** Replace the rule list atomically. Called from ConfigPanel on EDT. */
     public void setRules(List<HeaderRule> newRules) {
@@ -64,26 +62,29 @@ public class RequestReplayer implements HttpHandler {
 
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent requestToBeSent) {
-        // Pass through — we capture the original response in handleHttpResponseReceived
         return RequestToBeSentAction.continueWith(requestToBeSent);
     }
 
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
-        if (!active) return ResponseReceivedAction.continueWith(responseReceived);
+        var tool = responseReceived.toolSource().toolType();
+        boolean isProxy    = tool.name().equalsIgnoreCase("PROXY");
+        boolean isRepeater = tool.name().equalsIgnoreCase("REPEATER");
 
-        // Only intercept Proxy traffic (optionally Repeater)
-        var initiator = responseReceived.toolSource();
-        boolean isProxy   = initiator.toolType().name().equalsIgnoreCase("PROXY");
-        boolean isRepeater = initiator.toolType().name().equalsIgnoreCase("REPEATER");
+        // Must be enabled for the source tool
+        if (!((isProxy && interceptProxy) || (isRepeater && interceptRepeater))) {
+            return ResponseReceivedAction.continueWith(responseReceived);
+        }
 
-        if (!isProxy && !(interceptRepeater && isRepeater)) {
+        // ── In-scope check ────────────────────────────────────────────────────
+        HttpRequest origRequest = responseReceived.initiatingRequest();
+        String url = origRequest.url();
+        if (!api.scope().isInScope(url)) {
             return ResponseReceivedAction.continueWith(responseReceived);
         }
 
         // Skip static assets
-        String path = responseReceived.initiatingRequest().path();
-        if (isStaticAsset(path)) {
+        if (isStaticAsset(origRequest.path())) {
             return ResponseReceivedAction.continueWith(responseReceived);
         }
 
@@ -94,24 +95,22 @@ public class RequestReplayer implements HttpHandler {
         }
 
         // Capture original data
-        HttpRequest  origRequest  = responseReceived.initiatingRequest();
         HttpResponse origResponse = responseReceived;
-
-        String method    = origRequest.method();
-        String url       = origRequest.url();
+        String method     = origRequest.method();
         int    origStatus = origResponse.statusCode();
         int    origLen    = origResponse.body().length();
         byte[] origReqBytes  = origRequest.toByteArray().getBytes();
         byte[] origRespBytes = origResponse.toByteArray().getBytes();
 
-        // Create result row (PENDING)
+        // Create result row (PENDING state)
         TestResult result = new TestResult(method, url, origStatus, origLen, origReqBytes, origRespBytes);
         int rowIndex = tableModel.addResult(result);
 
-        // Fire modified and unauth requests in background
+        // Fire modified and unauth requests in background (both in same task, sequential)
+        final List<HeaderRule> rulesCopy = new ArrayList<>(activeRules);
         executor.submit(() -> {
-            replayModified(result, rowIndex, origRequest, activeRules);
-            replayUnauth(result, rowIndex, origRequest, activeRules);
+            replayModified(result, rowIndex, origRequest, rulesCopy);
+            replayUnauth(result, rowIndex, origRequest, rulesCopy);
         });
 
         return ResponseReceivedAction.continueWith(responseReceived);
@@ -119,10 +118,8 @@ public class RequestReplayer implements HttpHandler {
 
     // ─── Replay logic ─────────────────────────────────────────────────────────
 
-    private void replayModified(TestResult result,
-                                int rowIndex,
-                                HttpRequest origRequest,
-                                List<HeaderRule> activeRules) {
+    private void replayModified(TestResult result, int rowIndex,
+                                HttpRequest origRequest, List<HeaderRule> activeRules) {
         try {
             HttpRequest modRequest = applyRules(origRequest, activeRules);
             byte[] modReqBytes = modRequest.toByteArray().getBytes();
@@ -130,8 +127,8 @@ public class RequestReplayer implements HttpHandler {
             var modHttpResponse = api.http().sendRequest(modRequest);
             HttpResponse modResponse = modHttpResponse.response();
 
-            int    modStatus   = modResponse != null ? modResponse.statusCode()   : -1;
-            int    modLen      = modResponse != null ? modResponse.body().length() : -1;
+            int    modStatus    = modResponse != null ? modResponse.statusCode()   : -1;
+            int    modLen       = modResponse != null ? modResponse.body().length() : -1;
             byte[] modRespBytes = modResponse != null ? modResponse.toByteArray().getBytes() : new byte[0];
 
             result.setModifiedResult(modStatus, modLen, modReqBytes, modRespBytes);
@@ -142,10 +139,8 @@ public class RequestReplayer implements HttpHandler {
         }
     }
 
-    private void replayUnauth(TestResult result,
-                              int rowIndex,
-                              HttpRequest origRequest,
-                              List<HeaderRule> activeRules) {
+    private void replayUnauth(TestResult result, int rowIndex,
+                              HttpRequest origRequest, List<HeaderRule> activeRules) {
         try {
             HttpRequest unauthRequest = applyUnauthRules(origRequest, activeRules);
             byte[] unauthReqBytes = unauthRequest.toByteArray().getBytes();
@@ -153,8 +148,8 @@ public class RequestReplayer implements HttpHandler {
             var unauthHttpResponse = api.http().sendRequest(unauthRequest);
             HttpResponse unauthResponse = unauthHttpResponse.response();
 
-            int    unauthStatus   = unauthResponse != null ? unauthResponse.statusCode()   : -1;
-            int    unauthLen      = unauthResponse != null ? unauthResponse.body().length() : -1;
+            int    unauthStatus    = unauthResponse != null ? unauthResponse.statusCode()   : -1;
+            int    unauthLen       = unauthResponse != null ? unauthResponse.body().length() : -1;
             byte[] unauthRespBytes = unauthResponse != null ? unauthResponse.toByteArray().getBytes() : new byte[0];
 
             result.setUnauthResult(unauthStatus, unauthLen, unauthReqBytes, unauthRespBytes);
@@ -166,30 +161,15 @@ public class RequestReplayer implements HttpHandler {
     }
 
     /**
-     * Apply all active rules to produce the modified request.
-     *
-     * Rules are processed in order:
-     *  REPLACE — update header value if present, add if missing
-     *  REMOVE  — delete the header
-     *  ADD     — always add the header (even if already present — replaces existing)
+     * Apply all active rules to produce the modified request (User B token substitution).
      */
     private HttpRequest applyRules(HttpRequest request, List<HeaderRule> rules) {
         HttpRequest modified = request;
-
         for (HeaderRule rule : rules) {
             String name = rule.getHeaderName();
-
             switch (rule.getMode()) {
-                case REMOVE -> {
-                    // Remove all headers with this name
-                    List<HttpHeader> keepHeaders = new ArrayList<>();
-                    for (HttpHeader h : modified.headers()) {
-                        if (!h.name().equalsIgnoreCase(name)) keepHeaders.add(h);
-                    }
-                    modified = modified.withRemovedHeader(name);
-                }
+                case REMOVE -> modified = modified.withRemovedHeader(name);
                 case REPLACE -> {
-                    // Replace existing value or add if not present
                     boolean found = modified.headers().stream()
                             .anyMatch(h -> h.name().equalsIgnoreCase(name));
                     if (found) {
@@ -198,23 +178,28 @@ public class RequestReplayer implements HttpHandler {
                         modified = modified.withAddedHeader(name, rule.getReplacementValue());
                     }
                 }
-                case ADD -> {
-                    // Always set (replace if exists, otherwise add)
-                    modified = modified.withUpdatedHeader(name, rule.getReplacementValue());
-                }
+                case ADD -> modified = modified.withUpdatedHeader(name, rule.getReplacementValue());
             }
         }
         return modified;
     }
 
+    /**
+     * Apply unauthenticated rules: for each configured header, keep the name
+     * but set the value to an empty string — resulting in "Header:" with no value.
+     * This simulates a completely unauthenticated/logged-out request.
+     */
     private HttpRequest applyUnauthRules(HttpRequest request, List<HeaderRule> rules) {
         HttpRequest unauth = request;
         for (HeaderRule rule : rules) {
             String name = rule.getHeaderName();
+            // Only blank out headers that are actually present in the request
             boolean found = unauth.headers().stream()
                     .anyMatch(h -> h.name().equalsIgnoreCase(name));
             if (found) {
-                unauth = unauth.withUpdatedHeader(name, "");
+                // Remove and re-add with empty value to avoid trailing space
+                unauth = unauth.withRemovedHeader(name);
+                unauth = unauth.withAddedHeader(name, "");
             }
         }
         return unauth;

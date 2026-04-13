@@ -1,48 +1,89 @@
 package com.burpext.sessionx.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.requests.HttpRequest;
 import com.burpext.sessionx.core.TestResult;
 import com.burpext.sessionx.core.TestResult.VulnerabilityStatus;
 import com.burpext.sessionx.core.TestResultTableModel;
 import com.burpext.sessionx.engine.RequestReplayer;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.nio.charset.StandardCharsets;
 
+/**
+ * Root panel registered as the "SessionX" Burp Suite tab.
+ *
+ * Toolbar: [Proxy: OFF] [Repeater: OFF] [Clear]
+ * Table  : #, Method, URL, Orig.Status, Orig.Len, Mod.Status, Mod.Len, Unauth.Status, Unauth.Len, Result
+ * Detail : Tabbed panel (Original | Modified | Unauthenticated)
+ */
 public class MainPanel extends JPanel {
 
-    private final JToggleButton toggleBtn;
-    private final JLabel        statsLabel;
-    private final JTable        resultsTable;
-    private final ResultDetailPanel detailPanel;
+    // Highlight colors (Autorize-style)
+    private static final Color COLOR_VULN      = new Color(0xFF, 0xCC, 0xCC);  // light red
+    private static final Color COLOR_ENFORCED  = new Color(0xCC, 0xFF, 0xCC);  // light green
+    private static final Color COLOR_INTEREST  = new Color(0xFF, 0xF0, 0xCC);  // light amber
+    private static final Color COLOR_VULN_TXT    = new Color(0xAA, 0x00, 0x00);
+    private static final Color COLOR_ENFORCED_TXT= new Color(0x00, 0x66, 0x00);
+    private static final Color COLOR_INTEREST_TXT= new Color(0x99, 0x66, 0x00);
 
+    private final MontoyaApi           api;
     private final TestResultTableModel tableModel;
     private final RequestReplayer      replayer;
+
+    private final JToggleButton proxyToggle;
+    private final JToggleButton repeaterToggle;
+    private final JTable        resultsTable;
+    private final ResultDetailPanel detailPanel;
 
     public MainPanel(MontoyaApi api,
                      TestResultTableModel tableModel,
                      RequestReplayer replayer) {
-        this.tableModel  = tableModel;
-        this.replayer    = replayer;
+        this.api        = api;
+        this.tableModel = tableModel;
+        this.replayer   = replayer;
 
         setLayout(new BorderLayout());
 
         // ── Toolbar ──────────────────────────────────────────────────────────
-        toggleBtn = new JToggleButton("SessionX: OFF");
-        toggleBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        proxyToggle    = new JToggleButton("Proxy: OFF");
+        repeaterToggle = new JToggleButton("Repeater: OFF");
+        JButton clearBtn = new JButton("Clear");
 
-        JButton clearBtn = new JButton("Clear Table");
-        statsLabel = new JLabel("  Rows: 0   |   MOD: 🔴 0  🟢 0  🟡 0   |   UNAUTH: 🔴 0  🟢 0  🟡 0");
+        proxyToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        repeaterToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
-        toolbar.add(toggleBtn);
+        proxyToggle.addActionListener(e -> {
+            boolean on = proxyToggle.isSelected();
+            replayer.setInterceptProxy(on);
+            proxyToggle.setText(on ? "Proxy: ON " : "Proxy: OFF");
+        });
+        repeaterToggle.addActionListener(e -> {
+            boolean on = repeaterToggle.isSelected();
+            replayer.setInterceptRepeater(on);
+            repeaterToggle.setText(on ? "Repeater: ON " : "Repeater: OFF");
+        });
+        clearBtn.addActionListener(e -> {
+            tableModel.clear();
+            detailPanel.clear();
+        });
+
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 5));
+        toolbar.add(proxyToggle);
+        toolbar.add(repeaterToggle);
+        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
         toolbar.add(clearBtn);
-        toolbar.add(Box.createHorizontalStrut(20));
-        toolbar.add(statsLabel);
+        JLabel scopeNote = new JLabel("  ⚠ Only in-scope requests are tested");
+        scopeNote.setForeground(Color.DARK_GRAY);
+        scopeNote.setFont(scopeNote.getFont().deriveFont(Font.ITALIC, 11f));
+        toolbar.add(scopeNote);
 
         // ── Results table ─────────────────────────────────────────────────────
         resultsTable = buildResultsTable();
@@ -54,111 +95,72 @@ public class MainPanel extends JPanel {
         // ── Split pane ────────────────────────────────────────────────────────
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, detailPanel);
         splitPane.setResizeWeight(0.60);
-        splitPane.setDividerSize(5);
+        splitPane.setDividerSize(4);
+        splitPane.setBorder(null);
 
-        // ── Root tabbed pane ──────────────────────────────────────────────────
+        // ── Tabs ──────────────────────────────────────────────────────────────
         ConfigPanel configPanel = new ConfigPanel(replayer);
-
         JTabbedPane rootTabs = new JTabbedPane();
         rootTabs.addTab("Request / Response", splitPane);
         rootTabs.addTab("Configuration", configPanel);
 
-        // ── Assemble ─────────────────────────────────────────────────────────
         add(toolbar,  BorderLayout.NORTH);
         add(rootTabs, BorderLayout.CENTER);
 
-        // ── Table selection listener ──────────────────────────────────────────
+        // ── Selection listener ────────────────────────────────────────────────
         resultsTable.getSelectionModel().addListSelectionListener(e -> {
             if (e.getValueIsAdjusting()) return;
             int row = resultsTable.getSelectedRow();
             if (row == -1) return;
             int modelRow = resultsTable.convertRowIndexToModel(row);
-            TestResult result = tableModel.getResult(modelRow);
-            detailPanel.show(result);
+            detailPanel.show(tableModel.getResult(modelRow));
         });
 
-        // Right-click menu
+        // ── Right-click menu ──────────────────────────────────────────────────
         resultsTable.addMouseListener(new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) showContextMenu(e);
-            }
-            @Override public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) showContextMenu(e);
-            }
+            @Override public void mousePressed(MouseEvent e)  { if (e.isPopupTrigger()) showContextMenu(e); }
+            @Override public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger()) showContextMenu(e); }
         });
 
-        // Auto-refresh stats when model changes
-        tableModel.addTableModelListener(e -> SwingUtilities.invokeLater(this::refreshStats));
-
-        // ── Toggle button action ──────────────────────────────────────────────
-        toggleBtn.addActionListener(e -> {
-            boolean on = toggleBtn.isSelected();
-            replayer.setActive(on);
-            toggleBtn.setText(on ? "SessionX: ON " : "SessionX: OFF");
-        });
-
-        // ── Clear button action ───────────────────────────────────────────────
-        clearBtn.addActionListener(e -> {
-            tableModel.clear();
-            detailPanel.clear();
-            refreshStats();
-        });
+        // Auto-refresh when model changes
+        tableModel.addTableModelListener(e -> SwingUtilities.invokeLater(() -> resultsTable.repaint()));
     }
+
+    // ─── Results table ────────────────────────────────────────────────────────
 
     private JTable buildResultsTable() {
         JTable table = new JTable(tableModel);
         table.setRowHeight(22);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
         table.getTableHeader().setReorderingAllowed(false);
+        table.setFillsViewportHeight(true);
 
         // Column widths
-        table.getColumnModel().getColumn(0).setPreferredWidth(35);
-        table.getColumnModel().getColumn(0).setMaxWidth(50);
-        table.getColumnModel().getColumn(1).setPreferredWidth(60);
-        table.getColumnModel().getColumn(1).setMaxWidth(80);
-        table.getColumnModel().getColumn(2).setPreferredWidth(300);
-        table.getColumnModel().getColumn(3).setPreferredWidth(70);
-        table.getColumnModel().getColumn(4).setPreferredWidth(60);
-        table.getColumnModel().getColumn(5).setPreferredWidth(70);
-        table.getColumnModel().getColumn(6).setPreferredWidth(60);
-        table.getColumnModel().getColumn(7).setPreferredWidth(70);
-        table.getColumnModel().getColumn(8).setPreferredWidth(60);
-        table.getColumnModel().getColumn(9).setPreferredWidth(210);
+        int[] widths = {35, 60, 0, 70, 65, 75, 65, 85, 65, 190};
+        for (int i = 0; i < widths.length; i++) {
+            if (widths[i] > 0) {
+                table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+                if (i != 2) table.getColumnModel().getColumn(i).setMaxWidth(widths[i] * 2);
+            }
+        }
+        table.getColumnModel().getColumn(0).setMaxWidth(40);
+        table.getColumnModel().getColumn(1).setMaxWidth(75);
 
+        // Sortable
         TableRowSorter<TestResultTableModel> sorter = new TableRowSorter<>(tableModel);
         table.setRowSorter(sorter);
 
-        // Minimal Cell Renderer for just marking Vulnerable states
-        table.setDefaultRenderer(Object.class, new ResultCellRenderer());
-        table.setDefaultRenderer(Integer.class, new ResultCellRenderer());
+        // Autorize-style row color renderer
+        ResultCellRenderer renderer = new ResultCellRenderer();
+        for (int i = 0; i < tableModel.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setCellRenderer(renderer);
+        }
 
         return table;
     }
 
-    private void refreshStats() {
-        int total = 0;
-        int modVuln = 0, modEnf = 0, modInt = 0;
-        int unauthVuln = 0, unauthEnf = 0, unauthInt = 0;
-        for (int i = 0; i < tableModel.getRowCount(); i++) {
-            TestResult r = tableModel.getResult(i);
-            if (r == null) continue;
-            total++;
-            switch (r.getModVulnStatus()) {
-                case VULNERABLE   -> modVuln++;
-                case ENFORCED     -> modEnf++;
-                case INTERESTING  -> modInt++;
-            }
-            switch (r.getUnauthVulnStatus()) {
-                case VULNERABLE   -> unauthVuln++;
-                case ENFORCED     -> unauthEnf++;
-                case INTERESTING  -> unauthInt++;
-            }
-        }
-        statsLabel.setText(String.format("  Rows: %d   |   MOD: 🔴 %d  🟢 %d  🟡 %d   |   UNAUTH: 🔴 %d  🟢 %d  🟡 %d",
-                total, modVuln, modEnf, modInt, unauthVuln, unauthEnf, unauthInt));
-    }
+    // ─── Context menu ─────────────────────────────────────────────────────────
 
     private void showContextMenu(MouseEvent e) {
         int row = resultsTable.rowAtPoint(e.getPoint());
@@ -169,14 +171,53 @@ public class MainPanel extends JPanel {
         if (result == null) return;
 
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem copyUrl = new JMenuItem("Copy URL");
-        copyUrl.addActionListener(ev -> {
-            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new java.awt.datatransfer.StringSelection(result.getUrl()), null);
+
+        // Send ORIGINAL to Repeater
+        JMenuItem sendOrigToRepeater = new JMenuItem("Send Original to Repeater");
+        sendOrigToRepeater.addActionListener(ev -> {
+            if (result.getOrigRequestBytes().length > 0) {
+                HttpRequest req = HttpRequest.httpRequest(
+                        new String(result.getOrigRequestBytes(), StandardCharsets.UTF_8));
+                api.repeater().sendToRepeater(req);
+            }
         });
+        menu.add(sendOrigToRepeater);
+
+        // Send MODIFIED to Repeater
+        JMenuItem sendModToRepeater = new JMenuItem("Send Modified to Repeater");
+        sendModToRepeater.addActionListener(ev -> {
+            if (result.getModRequestBytes().length > 0) {
+                HttpRequest req = HttpRequest.httpRequest(
+                        new String(result.getModRequestBytes(), StandardCharsets.UTF_8));
+                api.repeater().sendToRepeater(req);
+            }
+        });
+        menu.add(sendModToRepeater);
+
+        // Send UNAUTH to Repeater
+        JMenuItem sendUnauthToRepeater = new JMenuItem("Send Unauthenticated to Repeater");
+        sendUnauthToRepeater.addActionListener(ev -> {
+            if (result.getUnauthRequestBytes().length > 0) {
+                HttpRequest req = HttpRequest.httpRequest(
+                        new String(result.getUnauthRequestBytes(), StandardCharsets.UTF_8));
+                api.repeater().sendToRepeater(req);
+            }
+        });
+        menu.add(sendUnauthToRepeater);
+
+        menu.addSeparator();
+
+        // Copy URL
+        JMenuItem copyUrl = new JMenuItem("Copy URL");
+        copyUrl.addActionListener(ev ->
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(result.getUrl()), null));
         menu.add(copyUrl);
+
         menu.show(e.getComponent(), e.getX(), e.getY());
     }
+
+    // ─── Cell renderer (Autorize-style row coloring) ──────────────────────────
 
     private class ResultCellRenderer extends DefaultTableCellRenderer {
         @Override
@@ -188,19 +229,45 @@ public class MainPanel extends JPanel {
             TestResult result = tableModel.getResult(modelRow);
 
             if (!isSelected && result != null) {
-                VulnerabilityStatus modStatus = result.getModVulnStatus();
+                VulnerabilityStatus modStatus   = result.getModVulnStatus();
                 VulnerabilityStatus unauthStatus = result.getUnauthVulnStatus();
-                if (column == 9) {
-                    setForeground(null);
-                } else {
-                    if (modStatus == VulnerabilityStatus.VULNERABLE || unauthStatus == VulnerabilityStatus.VULNERABLE) {
-                        // Light tint foreground to flag vulnerable request rows slightly
-                        setForeground(new Color(200, 30, 30)); 
-                    } else {
-                        setForeground(null);
-                    }
+
+                Color bg = null;
+                Color fg = null;
+
+                // Highest severity wins (Vulnerable > Interesting > Enforced)
+                if (modStatus == VulnerabilityStatus.VULNERABLE ||
+                    unauthStatus == VulnerabilityStatus.VULNERABLE) {
+                    bg = COLOR_VULN;
+                    fg = COLOR_VULN_TXT;
+                } else if (modStatus == VulnerabilityStatus.INTERESTING ||
+                           unauthStatus == VulnerabilityStatus.INTERESTING) {
+                    bg = COLOR_INTEREST;
+                    fg = COLOR_INTEREST_TXT;
+                } else if (modStatus == VulnerabilityStatus.ENFORCED &&
+                           unauthStatus == VulnerabilityStatus.ENFORCED) {
+                    bg = COLOR_ENFORCED;
+                    fg = COLOR_ENFORCED_TXT;
                 }
+
+                if (bg != null) {
+                    setBackground(bg);
+                    setForeground(fg);
+                } else {
+                    setBackground(table.getBackground());
+                    setForeground(table.getForeground());
+                }
+            } else if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                setForeground(table.getSelectionForeground());
             }
+
+            // Align numeric columns to center
+            int modelCol = column;
+            setHorizontalAlignment(modelCol == 0 || modelCol == 3 || modelCol == 4 ||
+                                   modelCol == 5 || modelCol == 6 || modelCol == 7 || modelCol == 8
+                    ? SwingConstants.CENTER : SwingConstants.LEFT);
+
             return this;
         }
     }
