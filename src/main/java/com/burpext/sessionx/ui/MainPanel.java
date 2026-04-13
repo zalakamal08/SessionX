@@ -52,6 +52,9 @@ public class MainPanel extends JPanel {
 
         setLayout(new BorderLayout());
 
+        // ── Detail panel (initialized first — referenced in lambdas below) ───────
+        detailPanel = new ResultDetailPanel();
+
         // ── Toolbar ──────────────────────────────────────────────────────────
         proxyToggle    = new JToggleButton("Proxy: OFF");
         repeaterToggle = new JToggleButton("Repeater: OFF");
@@ -88,9 +91,6 @@ public class MainPanel extends JPanel {
         // ── Results table ─────────────────────────────────────────────────────
         resultsTable = buildResultsTable();
         JScrollPane tableScroll = new JScrollPane(resultsTable);
-
-        // ── Detail panel ──────────────────────────────────────────────────────
-        detailPanel = new ResultDetailPanel();
 
         // ── Split pane ────────────────────────────────────────────────────────
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, detailPanel);
