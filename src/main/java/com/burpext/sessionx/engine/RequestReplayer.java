@@ -73,9 +73,9 @@ public class RequestReplayer implements HttpHandler {
         if (!active) return ResponseReceivedAction.continueWith(responseReceived);
 
         // Only intercept Proxy traffic (optionally Repeater)
-        var initiator = responseReceived.initiator();
-        boolean isProxy   = initiator.name().equalsIgnoreCase("PROXY");
-        boolean isRepeater = initiator.name().equalsIgnoreCase("REPEATER");
+        var initiator = responseReceived.toolSource();
+        boolean isProxy   = initiator.toolType().name().equalsIgnoreCase("PROXY");
+        boolean isRepeater = initiator.toolType().name().equalsIgnoreCase("REPEATER");
 
         if (!isProxy && !(interceptRepeater && isRepeater)) {
             return ResponseReceivedAction.continueWith(responseReceived);
