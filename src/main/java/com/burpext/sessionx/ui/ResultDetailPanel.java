@@ -86,6 +86,13 @@ public class ResultDetailPanel extends JPanel {
 
     public void clear() { showEmpty(); }
 
+    /** Pre-select a tab by index: 0=Original, 1=Modified, 2=Unauthenticated */
+    public void selectTab(int index) {
+        if (index >= 0 && index < tabs.getTabCount()) {
+            tabs.setSelectedIndex(index);
+        }
+    }
+
     private void showEmpty() {
         statusBanner.setText("Select a row to inspect the request/response pair");
         statusBanner.setForeground(null);

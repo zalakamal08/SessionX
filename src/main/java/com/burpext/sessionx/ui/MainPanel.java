@@ -2,63 +2,68 @@ package com.burpext.sessionx.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import com.burpext.sessionx.core.ModifiedTableModel;
 import com.burpext.sessionx.core.TestResult;
 import com.burpext.sessionx.core.TestResult.VulnerabilityStatus;
 import com.burpext.sessionx.core.TestResultTableModel;
+import com.burpext.sessionx.core.UnauthTableModel;
 import com.burpext.sessionx.engine.RequestReplayer;
+import com.burpext.sessionx.io.ResultsExporter;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
+import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.function.IntFunction;
 
-/**
- * Root panel registered as the "SessionX" Burp Suite tab.
- *
- * Toolbar: [Proxy: OFF] [Repeater: OFF] [Clear]
- * Table  : #, Method, URL, Orig.Status, Orig.Len, Mod.Status, Mod.Len, Unauth.Status, Unauth.Len, Result
- * Detail : Tabbed panel (Original | Modified | Unauthenticated)
- */
 public class MainPanel extends JPanel {
 
-    // Highlight colors (Autorize-style)
-    private static final Color COLOR_VULN      = new Color(0xFF, 0xCC, 0xCC);  // light red
-    private static final Color COLOR_ENFORCED  = new Color(0xCC, 0xFF, 0xCC);  // light green
-    private static final Color COLOR_INTEREST  = new Color(0xFF, 0xF0, 0xCC);  // light amber
-    private static final Color COLOR_VULN_TXT    = new Color(0xAA, 0x00, 0x00);
-    private static final Color COLOR_ENFORCED_TXT= new Color(0x00, 0x66, 0x00);
-    private static final Color COLOR_INTEREST_TXT= new Color(0x99, 0x66, 0x00);
+    // Autorize-style row background colors
+    private static final Color BG_VULN     = new Color(0xFF, 0xCC, 0xCC);
+    private static final Color BG_ENFORCED = new Color(0xCC, 0xFF, 0xCC);
+    private static final Color BG_INTEREST = new Color(0xFF, 0xF0, 0xCC);
+    private static final Color FG_VULN     = new Color(0x8B, 0x00, 0x00);
+    private static final Color FG_ENFORCED = new Color(0x00, 0x55, 0x00);
+    private static final Color FG_INTEREST = new Color(0x7A, 0x50, 0x00);
 
     private final MontoyaApi           api;
-    private final TestResultTableModel tableModel;
+    private final TestResultTableModel store;
     private final RequestReplayer      replayer;
 
     private final JToggleButton proxyToggle;
     private final JToggleButton repeaterToggle;
-    private final JTable        resultsTable;
-    private final ResultDetailPanel detailPanel;
 
-    public MainPanel(MontoyaApi api,
-                     TestResultTableModel tableModel,
-                     RequestReplayer replayer) {
-        this.api        = api;
-        this.tableModel = tableModel;
-        this.replayer   = replayer;
+    private final ModifiedTableModel modModel;
+    private final UnauthTableModel   unauthModel;
+    private final JTable             modTable;
+    private final JTable             unauthTable;
+    final         ResultDetailPanel  detailPanel;
+
+    public MainPanel(MontoyaApi api, TestResultTableModel store, RequestReplayer replayer) {
+        this.api      = api;
+        this.store    = store;
+        this.replayer = replayer;
 
         setLayout(new BorderLayout());
 
-        // ── Detail panel (initialized first — referenced in lambdas below) ───────
+        // Initialize detail panel first (referenced in lambdas below)
         detailPanel = new ResultDetailPanel();
 
-        // ── Toolbar ──────────────────────────────────────────────────────────
+        // View models backed by the same store
+        modModel    = new ModifiedTableModel(store);
+        unauthModel = new UnauthTableModel(store);
+
+        // Toolbar
         proxyToggle    = new JToggleButton("Proxy: OFF");
         repeaterToggle = new JToggleButton("Repeater: OFF");
-        JButton clearBtn = new JButton("Clear");
+        JButton clearBtn  = new JButton("Clear");
+        JButton exportBtn = new JButton("Export Results...");
 
         proxyToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         repeaterToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -73,201 +78,178 @@ public class MainPanel extends JPanel {
             replayer.setInterceptRepeater(on);
             repeaterToggle.setText(on ? "Repeater: ON " : "Repeater: OFF");
         });
-        clearBtn.addActionListener(e -> {
-            tableModel.clear();
-            detailPanel.clear();
-        });
+        clearBtn.addActionListener(e -> { store.clear(); detailPanel.clear(); });
+        exportBtn.addActionListener(e -> exportResults());
+
+        JLabel scopeNote = new JLabel("  In-scope only");
+        scopeNote.setForeground(Color.DARK_GRAY);
+        scopeNote.setFont(scopeNote.getFont().deriveFont(Font.ITALIC, 11f));
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 5));
         toolbar.add(proxyToggle);
         toolbar.add(repeaterToggle);
         toolbar.add(new JSeparator(SwingConstants.VERTICAL));
         toolbar.add(clearBtn);
-        JLabel scopeNote = new JLabel("  ⚠ Only in-scope requests are tested");
-        scopeNote.setForeground(Color.DARK_GRAY);
-        scopeNote.setFont(scopeNote.getFont().deriveFont(Font.ITALIC, 11f));
+        toolbar.add(exportBtn);
         toolbar.add(scopeNote);
 
-        // ── Results table ─────────────────────────────────────────────────────
-        resultsTable = buildResultsTable();
-        JScrollPane tableScroll = new JScrollPane(resultsTable);
+        // Tables
+        modTable    = buildTable(modModel,    false);
+        unauthTable = buildTable(unauthModel, true);
 
-        // ── Split pane ────────────────────────────────────────────────────────
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, detailPanel);
-        splitPane.setResizeWeight(0.60);
+        JTabbedPane resultTabs = new JTabbedPane();
+        resultTabs.addTab("Modified Results",        new JScrollPane(modTable));
+        resultTabs.addTab("Unauthenticated Results", new JScrollPane(unauthTable));
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, resultTabs, detailPanel);
+        splitPane.setResizeWeight(0.58);
         splitPane.setDividerSize(4);
         splitPane.setBorder(null);
 
-        // ── Tabs ──────────────────────────────────────────────────────────────
         ConfigPanel configPanel = new ConfigPanel(replayer);
         JTabbedPane rootTabs = new JTabbedPane();
         rootTabs.addTab("Request / Response", splitPane);
-        rootTabs.addTab("Configuration", configPanel);
+        rootTabs.addTab("Configuration",      configPanel);
 
         add(toolbar,  BorderLayout.NORTH);
         add(rootTabs, BorderLayout.CENTER);
 
-        // ── Selection listener ────────────────────────────────────────────────
-        resultsTable.getSelectionModel().addListSelectionListener(e -> {
+        // Selection: pre-select the right detail tab
+        modTable.getSelectionModel().addListSelectionListener(e -> {
             if (e.getValueIsAdjusting()) return;
-            int row = resultsTable.getSelectedRow();
+            int row = modTable.getSelectedRow();
             if (row == -1) return;
-            int modelRow = resultsTable.convertRowIndexToModel(row);
-            detailPanel.show(tableModel.getResult(modelRow));
+            detailPanel.show(modModel.getResult(modTable.convertRowIndexToModel(row)));
+            detailPanel.selectTab(1);
+        });
+        unauthTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            int row = unauthTable.getSelectedRow();
+            if (row == -1) return;
+            detailPanel.show(unauthModel.getResult(unauthTable.convertRowIndexToModel(row)));
+            detailPanel.selectTab(2);
         });
 
-        // ── Right-click menu ──────────────────────────────────────────────────
-        resultsTable.addMouseListener(new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e)  { if (e.isPopupTrigger()) showContextMenu(e); }
-            @Override public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger()) showContextMenu(e); }
-        });
-
-        // Auto-refresh when model changes
-        tableModel.addTableModelListener(e -> SwingUtilities.invokeLater(() -> resultsTable.repaint()));
+        // Right-click using method references (satisfies ResultProvider functional interface)
+        addContextMenu(modTable,    row -> modModel.getResult(row));
+        addContextMenu(unauthTable, row -> unauthModel.getResult(row));
     }
 
-    // ─── Results table ────────────────────────────────────────────────────────
-
-    private JTable buildResultsTable() {
-        JTable table = new JTable(tableModel);
+    // Build a JTable with correct widths, sorter, and color renderer
+    private <M extends AbstractTableModel> JTable buildTable(M model, boolean useUnauthColors) {
+        JTable table = new JTable(model);
         table.setRowHeight(22);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.getTableHeader().setReorderingAllowed(false);
         table.setFillsViewportHeight(true);
 
-        // Column widths
-        int[] widths = {35, 60, 0, 70, 65, 75, 65, 85, 65, 190};
+        // #, Method, URL, Orig.Status, Orig.Len, X.Status, X.Len, Result
+        int[] widths = {35, 60, 0, 80, 70, 80, 70, 170};
         for (int i = 0; i < widths.length; i++) {
-            if (widths[i] > 0) {
-                table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
-                if (i != 2) table.getColumnModel().getColumn(i).setMaxWidth(widths[i] * 2);
-            }
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i] > 0 ? widths[i] : 300);
+            if (i != 2) table.getColumnModel().getColumn(i).setMaxWidth(widths[i] > 0 ? widths[i] * 2 : Integer.MAX_VALUE);
         }
-        table.getColumnModel().getColumn(0).setMaxWidth(40);
-        table.getColumnModel().getColumn(1).setMaxWidth(75);
 
-        // Sortable
-        TableRowSorter<TestResultTableModel> sorter = new TableRowSorter<>(tableModel);
-        table.setRowSorter(sorter);
+        table.setRowSorter(new TableRowSorter<>(model));
 
-        // Autorize-style row color renderer
-        ResultCellRenderer renderer = new ResultCellRenderer();
-        for (int i = 0; i < tableModel.getColumnCount(); i++) {
+        RowRenderer renderer = new RowRenderer(useUnauthColors);
+        for (int i = 0; i < model.getColumnCount(); i++) {
             table.getColumnModel().getColumn(i).setCellRenderer(renderer);
         }
-
         return table;
     }
 
-    // ─── Context menu ─────────────────────────────────────────────────────────
+    private void addContextMenu(JTable table, IntFunction<TestResult> resultAt) {
+        table.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e)  { if (e.isPopupTrigger()) showContextMenu(e, table, resultAt); }
+            @Override public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger()) showContextMenu(e, table, resultAt); }
+        });
+    }
 
-    private void showContextMenu(MouseEvent e) {
-        int row = resultsTable.rowAtPoint(e.getPoint());
+    private void showContextMenu(MouseEvent e, JTable table, IntFunction<TestResult> resultAt) {
+        int row = table.rowAtPoint(e.getPoint());
         if (row < 0) return;
-        resultsTable.setRowSelectionInterval(row, row);
-        int modelRow = resultsTable.convertRowIndexToModel(row);
-        TestResult result = tableModel.getResult(modelRow);
+        table.setRowSelectionInterval(row, row);
+        TestResult result = resultAt.apply(table.convertRowIndexToModel(row));
         if (result == null) return;
 
         JPopupMenu menu = new JPopupMenu();
-
-        // Send ORIGINAL to Repeater
-        JMenuItem sendOrigToRepeater = new JMenuItem("Send Original to Repeater");
-        sendOrigToRepeater.addActionListener(ev -> {
-            if (result.getOrigRequestBytes().length > 0) {
-                HttpRequest req = HttpRequest.httpRequest(
-                        new String(result.getOrigRequestBytes(), StandardCharsets.UTF_8));
-                api.repeater().sendToRepeater(req);
-            }
-        });
-        menu.add(sendOrigToRepeater);
-
-        // Send MODIFIED to Repeater
-        JMenuItem sendModToRepeater = new JMenuItem("Send Modified to Repeater");
-        sendModToRepeater.addActionListener(ev -> {
-            if (result.getModRequestBytes().length > 0) {
-                HttpRequest req = HttpRequest.httpRequest(
-                        new String(result.getModRequestBytes(), StandardCharsets.UTF_8));
-                api.repeater().sendToRepeater(req);
-            }
-        });
-        menu.add(sendModToRepeater);
-
-        // Send UNAUTH to Repeater
-        JMenuItem sendUnauthToRepeater = new JMenuItem("Send Unauthenticated to Repeater");
-        sendUnauthToRepeater.addActionListener(ev -> {
-            if (result.getUnauthRequestBytes().length > 0) {
-                HttpRequest req = HttpRequest.httpRequest(
-                        new String(result.getUnauthRequestBytes(), StandardCharsets.UTF_8));
-                api.repeater().sendToRepeater(req);
-            }
-        });
-        menu.add(sendUnauthToRepeater);
-
+        menu.add(repeaterItem("Send Original to Repeater",         result.getOrigRequestBytes()));
+        menu.add(repeaterItem("Send Modified to Repeater",         result.getModRequestBytes()));
+        menu.add(repeaterItem("Send Unauthenticated to Repeater",  result.getUnauthRequestBytes()));
         menu.addSeparator();
-
-        // Copy URL
         JMenuItem copyUrl = new JMenuItem("Copy URL");
         copyUrl.addActionListener(ev ->
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(result.getUrl()), null));
+                Toolkit.getDefaultToolkit().getSystemClipboard()
+                        .setContents(new StringSelection(result.getUrl()), null));
         menu.add(copyUrl);
-
         menu.show(e.getComponent(), e.getX(), e.getY());
     }
 
-    // ─── Cell renderer (Autorize-style row coloring) ──────────────────────────
+    private JMenuItem repeaterItem(String label, byte[] bytes) {
+        JMenuItem item = new JMenuItem(label);
+        item.setEnabled(bytes != null && bytes.length > 0);
+        item.addActionListener(ev -> {
+            if (bytes != null && bytes.length > 0) {
+                api.repeater().sendToRepeater(
+                        HttpRequest.httpRequest(new String(bytes, StandardCharsets.UTF_8)));
+            }
+        });
+        return item;
+    }
 
-    private class ResultCellRenderer extends DefaultTableCellRenderer {
+    private void exportResults() {
+        if (store.getResultCount() == 0) {
+            JOptionPane.showMessageDialog(this, "No results to export.", "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Results as CSV");
+        chooser.setSelectedFile(new File("sessionx_results.csv"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase().endsWith(".csv")) file = new File(file.getAbsolutePath() + ".csv");
+
+        try {
+            ResultsExporter.exportResultsCsv(store.getAll(), file);
+            JOptionPane.showMessageDialog(this, "Exported to:\n" + file.getAbsolutePath(),
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private class RowRenderer extends DefaultTableCellRenderer {
+        private final boolean useUnauth;
+        RowRenderer(boolean useUnauth) { this.useUnauth = useUnauth; }
+
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value,
                 boolean isSelected, boolean hasFocus, int row, int column) {
             super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-
             int modelRow = table.convertRowIndexToModel(row);
-            TestResult result = tableModel.getResult(modelRow);
+            TestResult result = store.getResult(modelRow);
 
             if (!isSelected && result != null) {
-                VulnerabilityStatus modStatus   = result.getModVulnStatus();
-                VulnerabilityStatus unauthStatus = result.getUnauthVulnStatus();
-
-                Color bg = null;
-                Color fg = null;
-
-                // Highest severity wins (Vulnerable > Interesting > Enforced)
-                if (modStatus == VulnerabilityStatus.VULNERABLE ||
-                    unauthStatus == VulnerabilityStatus.VULNERABLE) {
-                    bg = COLOR_VULN;
-                    fg = COLOR_VULN_TXT;
-                } else if (modStatus == VulnerabilityStatus.INTERESTING ||
-                           unauthStatus == VulnerabilityStatus.INTERESTING) {
-                    bg = COLOR_INTEREST;
-                    fg = COLOR_INTEREST_TXT;
-                } else if (modStatus == VulnerabilityStatus.ENFORCED &&
-                           unauthStatus == VulnerabilityStatus.ENFORCED) {
-                    bg = COLOR_ENFORCED;
-                    fg = COLOR_ENFORCED_TXT;
-                }
-
-                if (bg != null) {
-                    setBackground(bg);
-                    setForeground(fg);
-                } else {
-                    setBackground(table.getBackground());
-                    setForeground(table.getForeground());
+                VulnerabilityStatus status = useUnauth ? result.getUnauthVulnStatus() : result.getModVulnStatus();
+                switch (status) {
+                    case VULNERABLE  -> { setBackground(BG_VULN);     setForeground(FG_VULN); }
+                    case INTERESTING -> { setBackground(BG_INTEREST);  setForeground(FG_INTEREST); }
+                    case ENFORCED    -> { setBackground(BG_ENFORCED);  setForeground(FG_ENFORCED); }
+                    default          -> { setBackground(table.getBackground()); setForeground(table.getForeground()); }
                 }
             } else if (isSelected) {
                 setBackground(table.getSelectionBackground());
                 setForeground(table.getSelectionForeground());
             }
 
-            // Align numeric columns to center
-            int modelCol = column;
-            setHorizontalAlignment(modelCol == 0 || modelCol == 3 || modelCol == 4 ||
-                                   modelCol == 5 || modelCol == 6 || modelCol == 7 || modelCol == 8
-                    ? SwingConstants.CENTER : SwingConstants.LEFT);
-
+            setHorizontalAlignment(
+                    column == 0 || column == 3 || column == 4 || column == 5 || column == 6
+                            ? SwingConstants.CENTER : SwingConstants.LEFT);
             return this;
         }
     }

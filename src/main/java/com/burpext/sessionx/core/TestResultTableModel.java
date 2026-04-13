@@ -87,4 +87,9 @@ public class TestResultTableModel extends AbstractTableModel {
     }
 
     public int getResultCount() { return rows.size(); }
+
+    /** Returns an unmodifiable snapshot of all results for export. */
+    public java.util.List<TestResult> getAll() {
+        return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(rows));
+    }
 }
