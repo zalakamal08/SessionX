@@ -37,14 +37,14 @@ import java.util.List;
 public class ConfigPanel extends JPanel {
 
     // ─── Colors ───────────────────────────────────────────────────────────────
-    private static final Color BG_DARK      = new Color(0x1E, 0x1E, 0x2E);
-    private static final Color BG_PANEL     = new Color(0x28, 0x28, 0x3E);
-    private static final Color BG_TABLE     = new Color(0x1A, 0x1A, 0x2C);
-    private static final Color FG_TEXT      = new Color(0xCD, 0xD6, 0xF4);
-    private static final Color FG_DIM       = new Color(0x6C, 0x70, 0x86);
-    private static final Color ACCENT_BLUE  = new Color(0x89, 0xB4, 0xFA);
-    private static final Color ACCENT_GREEN = new Color(0xA6, 0xE3, 0xA1);
-    private static final Color GRID_COLOR   = new Color(0x31, 0x32, 0x44);
+    private static final Color BG_DARK      = new Color(0xFA, 0xFA, 0xFA);
+    private static final Color BG_PANEL     = new Color(0xF3, 0xF3, 0xF5);
+    private static final Color BG_TABLE     = Color.WHITE;
+    private static final Color FG_TEXT      = new Color(0x20, 0x21, 0x24);
+    private static final Color FG_DIM       = new Color(0x5F, 0x63, 0x68);
+    private static final Color ACCENT_BLUE  = new Color(0x1A, 0x73, 0xE8);
+    private static final Color ACCENT_GREEN = new Color(0x1E, 0x8E, 0x3E);
+    private static final Color GRID_COLOR   = new Color(0xDA, 0xDC, 0xE0);
 
     private static final String[] COMMON_HEADERS = {
         "Authorization", "Cookie", "X-Api-Key", "X-Auth-Token",
@@ -149,8 +149,8 @@ public class ConfigPanel extends JPanel {
 
         // ── Sync button ──────────────────────────────────────────────────────
         JButton btnApply = accentButton("Apply Rules");
-        btnApply.setBackground(new Color(0x31, 0x3B, 0x6F));
-        btnApply.setForeground(ACCENT_GREEN);
+        btnApply.setBackground(new Color(0xE8, 0xF0, 0xFE));
+        btnApply.setForeground(ACCENT_BLUE);
         btnApply.addActionListener(e -> syncRules());
 
         JPanel applyRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -204,7 +204,7 @@ public class ConfigPanel extends JPanel {
         t.setBackground(BG_TABLE);
         t.setForeground(FG_TEXT);
         t.setGridColor(GRID_COLOR);
-        t.setSelectionBackground(new Color(0x45, 0x47, 0x6B));
+        t.setSelectionBackground(new Color(0xE8, 0xF0, 0xFE));
         t.setSelectionForeground(FG_TEXT);
         t.setRowHeight(24);
         t.setFont(new Font("JetBrains Mono", Font.PLAIN, 12));
@@ -231,7 +231,7 @@ public class ConfigPanel extends JPanel {
 
     private JButton pillButton(String text) {
         JButton btn = new JButton(text);
-        btn.setBackground(new Color(0x31, 0x32, 0x44));
+        btn.setBackground(Color.WHITE);
         btn.setForeground(FG_TEXT);
         btn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         btn.setBorder(BorderFactory.createCompoundBorder(
@@ -253,7 +253,7 @@ public class ConfigPanel extends JPanel {
 
     private static TitledBorder titledBorder(String title) {
         TitledBorder b = BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(0x45, 0x47, 0x6B), 1, true),
+                BorderFactory.createLineBorder(new Color(0xDA, 0xDC, 0xE0), 1, true),
                 title);
         b.setTitleColor(ACCENT_BLUE);
         b.setTitleFont(new Font("Segoe UI", Font.BOLD, 12));

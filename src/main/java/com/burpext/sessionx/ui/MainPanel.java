@@ -32,21 +32,21 @@ import java.awt.event.MouseEvent;
 public class MainPanel extends JPanel {
 
     // ─── Colors ───────────────────────────────────────────────────────────────
-    private static final Color BG_DARK         = new Color(0x1E, 0x1E, 0x2E);
-    private static final Color BG_TOOLBAR      = new Color(0x18, 0x18, 0x2B);
-    private static final Color BG_TABLE        = new Color(0x1A, 0x1A, 0x2C);
-    private static final Color BG_ROW_ALT      = new Color(0x22, 0x22, 0x38);
-    private static final Color BG_SEL          = new Color(0x45, 0x47, 0x6B);
-    private static final Color FG_TEXT         = new Color(0xCD, 0xD6, 0xF4);
-    private static final Color FG_DIM          = new Color(0x6C, 0x70, 0x86);
-    private static final Color ACCENT_BLUE     = new Color(0x89, 0xB4, 0xFA);
-    private static final Color ACCENT_RED      = new Color(0xF3, 0x8B, 0xA8);
-    private static final Color ACCENT_GREEN    = new Color(0xA6, 0xE3, 0xA1);
-    private static final Color ACCENT_YELLOW   = new Color(0xF9, 0xE2, 0xAF);
-    private static final Color GRID_COLOR      = new Color(0x31, 0x32, 0x44);
+    private static final Color BG_DARK         = new Color(0xFA, 0xFA, 0xFA);
+    private static final Color BG_TOOLBAR      = new Color(0xF3, 0xF3, 0xF5);
+    private static final Color BG_TABLE        = Color.WHITE;
+    private static final Color BG_ROW_ALT      = new Color(0xF8, 0xF9, 0xFA);
+    private static final Color BG_SEL          = new Color(0xE8, 0xF0, 0xFE);
+    private static final Color FG_TEXT         = new Color(0x20, 0x21, 0x24);
+    private static final Color FG_DIM          = new Color(0x5F, 0x63, 0x68);
+    private static final Color ACCENT_BLUE     = new Color(0x1A, 0x73, 0xE8);
+    private static final Color ACCENT_RED      = new Color(0xD9, 0x30, 0x25);
+    private static final Color ACCENT_GREEN    = new Color(0x1E, 0x8E, 0x3E);
+    private static final Color ACCENT_YELLOW   = new Color(0xE3, 0x74, 0x00);
+    private static final Color GRID_COLOR      = new Color(0xDA, 0xDC, 0xE0);
 
-    private static final Color COLOR_ON        = new Color(0x40, 0xC0, 0x70);
-    private static final Color COLOR_OFF       = new Color(0xF3, 0x8B, 0xA8);
+    private static final Color COLOR_ON        = new Color(0x1E, 0x8E, 0x3E);
+    private static final Color COLOR_OFF       = new Color(0xD9, 0x30, 0x25);
 
     // ─── Components ───────────────────────────────────────────────────────────
     private final JToggleButton toggleBtn;
@@ -177,7 +177,7 @@ public class MainPanel extends JPanel {
         JButton btn = new JButton("Clear Table");
         btn.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btn.setForeground(FG_TEXT);
-        btn.setBackground(new Color(0x31, 0x32, 0x44));
+        btn.setBackground(Color.WHITE);
         btn.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(GRID_COLOR, 1, true),
                 new EmptyBorder(6, 14, 6, 14)));
@@ -202,7 +202,7 @@ public class MainPanel extends JPanel {
         table.setShowVerticalLines(false);
 
         // Header
-        table.getTableHeader().setBackground(new Color(0x28, 0x28, 0x3E));
+        table.getTableHeader().setBackground(BG_TOOLBAR);
         table.getTableHeader().setForeground(ACCENT_BLUE);
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         table.getTableHeader().setReorderingAllowed(false);
@@ -259,7 +259,7 @@ public class MainPanel extends JPanel {
         if (result == null) return;
 
         JPopupMenu menu = new JPopupMenu();
-        menu.setBackground(new Color(0x28, 0x28, 0x3E));
+        menu.setBackground(Color.WHITE);
 
         JMenuItem copyUrl = styledMenuItem("Copy URL");
         copyUrl.addActionListener(ev -> {
@@ -272,7 +272,7 @@ public class MainPanel extends JPanel {
 
     private JMenuItem styledMenuItem(String text) {
         JMenuItem item = new JMenuItem(text);
-        item.setBackground(new Color(0x28, 0x28, 0x3E));
+        item.setBackground(Color.WHITE);
         item.setForeground(FG_TEXT);
         item.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         return item;
@@ -314,7 +314,7 @@ public class MainPanel extends JPanel {
                     } else {
                         // Subtle tint on vulnerable rows
                         if (status == VulnerabilityStatus.VULNERABLE) {
-                            setForeground(new Color(0xF3, 0xBB, 0xC8));
+                            setForeground(new Color(0xB3, 0x14, 0x12));
                         } else {
                             setForeground(FG_TEXT);
                         }

@@ -22,15 +22,15 @@ import java.nio.charset.StandardCharsets;
 public class ResultDetailPanel extends JPanel {
 
     // ─── Colors ───────────────────────────────────────────────────────────────
-    private static final Color BG_DARK       = new Color(0x1E, 0x1E, 0x2E);
-    private static final Color BG_PANEL      = new Color(0x28, 0x28, 0x3E);
-    private static final Color BG_TEXT       = new Color(0x1A, 0x1A, 0x2C);
-    private static final Color FG_TEXT       = new Color(0xCD, 0xD6, 0xF4);
-    private static final Color FG_DIM        = new Color(0x6C, 0x70, 0x86);
-    private static final Color ACCENT_RED    = new Color(0xF3, 0x8B, 0xA8);
-    private static final Color ACCENT_GREEN  = new Color(0xA6, 0xE3, 0xA1);
-    private static final Color ACCENT_YELLOW = new Color(0xF9, 0xE2, 0xAF);
-    private static final Color ACCENT_BLUE   = new Color(0x89, 0xB4, 0xFA);
+    private static final Color BG_DARK       = new Color(0xFA, 0xFA, 0xFA);
+    private static final Color BG_PANEL      = new Color(0xF3, 0xF3, 0xF5);
+    private static final Color BG_TEXT       = Color.WHITE;
+    private static final Color FG_TEXT       = new Color(0x20, 0x21, 0x24);
+    private static final Color FG_DIM        = new Color(0x5F, 0x63, 0x68);
+    private static final Color ACCENT_RED    = new Color(0xD9, 0x30, 0x25);
+    private static final Color ACCENT_GREEN  = new Color(0x1E, 0x8E, 0x3E);
+    private static final Color ACCENT_YELLOW = new Color(0xE3, 0x74, 0x00);
+    private static final Color ACCENT_BLUE   = new Color(0x1A, 0x73, 0xE8);
 
     private final JTabbedPane tabs;
 
