@@ -7,48 +7,14 @@ import com.burpext.sessionx.core.TestResultTableModel;
 import com.burpext.sessionx.engine.RequestReplayer;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
-/**
- * Root panel registered as the "SessionX" Burp Suite tab.
- *
- * Layout:
- * ┌────────────────────────────────────────────────────────────────┐
- * │  Toolbar: [SessionX: OFF] [Clear Table]  rows: 0  Vulnerable: 0│
- * ├─────────────────────────────────┬──────────────────────────────┤
- * │  Results Table                  │  Detail Panel                │
- * │  (left ~60%)                    │  (right ~40%)                │
- * ├─────────────────────────────────┴──────────────────────────────┤
- * │  [Result Table Tab] [Configuration Tab]                        │
- * └────────────────────────────────────────────────────────────────┘
- *
- * The "Result Table" and "Configuration" live in a JTabbedPane at the root.
- */
 public class MainPanel extends JPanel {
 
-    // ─── Colors ───────────────────────────────────────────────────────────────
-    private static final Color BG_DARK         = new Color(0xFA, 0xFA, 0xFA);
-    private static final Color BG_TOOLBAR      = new Color(0xF3, 0xF3, 0xF5);
-    private static final Color BG_TABLE        = Color.WHITE;
-    private static final Color BG_ROW_ALT      = new Color(0xF8, 0xF9, 0xFA);
-    private static final Color BG_SEL          = new Color(0xE8, 0xF0, 0xFE);
-    private static final Color FG_TEXT         = new Color(0x20, 0x21, 0x24);
-    private static final Color FG_DIM          = new Color(0x5F, 0x63, 0x68);
-    private static final Color ACCENT_BLUE     = new Color(0x1A, 0x73, 0xE8);
-    private static final Color ACCENT_RED      = new Color(0xD9, 0x30, 0x25);
-    private static final Color ACCENT_GREEN    = new Color(0x1E, 0x8E, 0x3E);
-    private static final Color ACCENT_YELLOW   = new Color(0xE3, 0x74, 0x00);
-    private static final Color GRID_COLOR      = new Color(0xDA, 0xDC, 0xE0);
-
-    private static final Color COLOR_ON        = new Color(0x1E, 0x8E, 0x3E);
-    private static final Color COLOR_OFF       = new Color(0xD9, 0x30, 0x25);
-
-    // ─── Components ───────────────────────────────────────────────────────────
     private final JToggleButton toggleBtn;
     private final JLabel        statsLabel;
     private final JTable        resultsTable;
@@ -64,17 +30,16 @@ public class MainPanel extends JPanel {
         this.replayer    = replayer;
 
         setLayout(new BorderLayout());
-        setBackground(BG_DARK);
 
         // ── Toolbar ──────────────────────────────────────────────────────────
-        toggleBtn = buildToggleButton();
-        JButton clearBtn = buildClearButton();
+        toggleBtn = new JToggleButton("SessionX: OFF");
+        toggleBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        JButton clearBtn = new JButton("Clear Table");
+        
         statsLabel = new JLabel("  Rows: 0   |   🔴 0   🟢 0   🟡 0");
-        statsLabel.setForeground(FG_DIM);
-        statsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
-        toolbar.setBackground(BG_TOOLBAR);
         toolbar.add(toggleBtn);
         toolbar.add(clearBtn);
         toolbar.add(Box.createHorizontalStrut(20));
@@ -82,11 +47,7 @@ public class MainPanel extends JPanel {
 
         // ── Results table ─────────────────────────────────────────────────────
         resultsTable = buildResultsTable();
-
         JScrollPane tableScroll = new JScrollPane(resultsTable);
-        tableScroll.setBackground(BG_DARK);
-        tableScroll.getViewport().setBackground(BG_TABLE);
-        tableScroll.setBorder(BorderFactory.createLineBorder(GRID_COLOR));
 
         // ── Detail panel ──────────────────────────────────────────────────────
         detailPanel = new ResultDetailPanel();
@@ -95,17 +56,12 @@ public class MainPanel extends JPanel {
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, detailPanel);
         splitPane.setResizeWeight(0.60);
         splitPane.setDividerSize(5);
-        splitPane.setBackground(BG_DARK);
-        splitPane.setBorder(null);
 
         // ── Root tabbed pane ──────────────────────────────────────────────────
         ConfigPanel configPanel = new ConfigPanel(replayer);
 
         JTabbedPane rootTabs = new JTabbedPane();
-        rootTabs.setBackground(BG_DARK);
-        rootTabs.setForeground(FG_TEXT);
-        rootTabs.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        rootTabs.addTab("Request/Response Viewers", splitPane);
+        rootTabs.addTab("Request / Response", splitPane);
         rootTabs.addTab("Configuration", configPanel);
 
         // ── Assemble ─────────────────────────────────────────────────────────
@@ -139,7 +95,7 @@ public class MainPanel extends JPanel {
         toggleBtn.addActionListener(e -> {
             boolean on = toggleBtn.isSelected();
             replayer.setActive(on);
-            updateToggleAppearance(on);
+            toggleBtn.setText(on ? "SessionX: ON " : "SessionX: OFF");
         });
 
         // ── Clear button action ───────────────────────────────────────────────
@@ -150,61 +106,12 @@ public class MainPanel extends JPanel {
         });
     }
 
-    // ─── UI builders ─────────────────────────────────────────────────────────
-
-    private JToggleButton buildToggleButton() {
-        JToggleButton btn = new JToggleButton("SessionX: OFF");
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btn.setForeground(Color.WHITE);
-        btn.setBackground(COLOR_OFF);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(COLOR_OFF.darker(), 1, true),
-                new EmptyBorder(6, 18, 6, 18)));
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return btn;
-    }
-
-    private void updateToggleAppearance(boolean on) {
-        toggleBtn.setText(on ? "SessionX: ON " : "SessionX: OFF");
-        toggleBtn.setBackground(on ? COLOR_ON : COLOR_OFF);
-        toggleBtn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder((on ? COLOR_ON : COLOR_OFF).darker(), 1, true),
-                new EmptyBorder(6, 18, 6, 18)));
-    }
-
-    private JButton buildClearButton() {
-        JButton btn = new JButton("Clear Table");
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btn.setForeground(FG_TEXT);
-        btn.setBackground(Color.WHITE);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(GRID_COLOR, 1, true),
-                new EmptyBorder(6, 14, 6, 14)));
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return btn;
-    }
-
     private JTable buildResultsTable() {
         JTable table = new JTable(tableModel);
-        table.setBackground(BG_TABLE);
-        table.setForeground(FG_TEXT);
-        table.setGridColor(GRID_COLOR);
-        table.setSelectionBackground(BG_SEL);
-        table.setSelectionForeground(FG_TEXT);
         table.setRowHeight(22);
-        table.setFont(new Font("JetBrains Mono", Font.PLAIN, 12));
         table.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setIntercellSpacing(new Dimension(8, 1));
-        table.setShowHorizontalLines(true);
-        table.setShowVerticalLines(false);
 
-        // Header
-        table.getTableHeader().setBackground(BG_TOOLBAR);
-        table.getTableHeader().setForeground(ACCENT_BLUE);
-        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         table.getTableHeader().setReorderingAllowed(false);
 
         // Column widths
@@ -219,18 +126,15 @@ public class MainPanel extends JPanel {
         table.getColumnModel().getColumn(6).setPreferredWidth(80);
         table.getColumnModel().getColumn(7).setPreferredWidth(130);
 
-        // Sortable
         TableRowSorter<TestResultTableModel> sorter = new TableRowSorter<>(tableModel);
         table.setRowSorter(sorter);
 
-        // Custom cell renderer for color-coded rows
+        // Minimal Cell Renderer for just marking Vulnerable states
         table.setDefaultRenderer(Object.class, new ResultCellRenderer());
         table.setDefaultRenderer(Integer.class, new ResultCellRenderer());
 
         return table;
     }
-
-    // ─── Stats ────────────────────────────────────────────────────────────────
 
     private void refreshStats() {
         int total = 0, vuln = 0, enforced = 0, interesting = 0;
@@ -248,8 +152,6 @@ public class MainPanel extends JPanel {
                 total, vuln, enforced, interesting));
     }
 
-    // ─── Context menu ─────────────────────────────────────────────────────────
-
     private void showContextMenu(MouseEvent e) {
         int row = resultsTable.rowAtPoint(e.getPoint());
         if (row < 0) return;
@@ -259,9 +161,7 @@ public class MainPanel extends JPanel {
         if (result == null) return;
 
         JPopupMenu menu = new JPopupMenu();
-        menu.setBackground(Color.WHITE);
-
-        JMenuItem copyUrl = styledMenuItem("Copy URL");
+        JMenuItem copyUrl = new JMenuItem("Copy URL");
         copyUrl.addActionListener(ev -> {
             java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(new java.awt.datatransfer.StringSelection(result.getUrl()), null);
@@ -270,22 +170,7 @@ public class MainPanel extends JPanel {
         menu.show(e.getComponent(), e.getX(), e.getY());
     }
 
-    private JMenuItem styledMenuItem(String text) {
-        JMenuItem item = new JMenuItem(text);
-        item.setBackground(Color.WHITE);
-        item.setForeground(FG_TEXT);
-        item.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        return item;
-    }
-
-    // ─── Cell Renderer ────────────────────────────────────────────────────────
-
-    /**
-     * Colors each row based on the vulnerability status in the last column.
-     * Alternating row background for readability.
-     */
     private class ResultCellRenderer extends DefaultTableCellRenderer {
-
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value,
                 boolean isSelected, boolean hasFocus, int row, int column) {
@@ -294,40 +179,24 @@ public class MainPanel extends JPanel {
             int modelRow = table.convertRowIndexToModel(row);
             TestResult result = tableModel.getResult(modelRow);
 
-            if (isSelected) {
-                setBackground(BG_SEL);
-                setForeground(FG_TEXT);
-            } else {
-                Color rowBg = (row % 2 == 0) ? BG_TABLE : BG_ROW_ALT;
-                setBackground(rowBg);
-
-                if (result != null) {
-                    VulnerabilityStatus status = result.getStatus();
-                    // Color the Result column text
-                    if (column == 7) {
-                        setForeground(switch (status) {
-                            case VULNERABLE  -> ACCENT_RED;
-                            case ENFORCED    -> ACCENT_GREEN;
-                            case INTERESTING -> ACCENT_YELLOW;
-                            default          -> FG_DIM;
-                        });
-                    } else {
-                        // Subtle tint on vulnerable rows
-                        if (status == VulnerabilityStatus.VULNERABLE) {
-                            setForeground(new Color(0xB3, 0x14, 0x12));
-                        } else {
-                            setForeground(FG_TEXT);
-                        }
+            if (!isSelected && result != null) {
+                VulnerabilityStatus status = result.getStatus();
+                if (column == 7) {
+                    switch (status) {
+                        case VULNERABLE  -> setForeground(new Color(220, 53, 69));
+                        case ENFORCED    -> setForeground(new Color(40, 167, 69));
+                        case INTERESTING -> setForeground(new Color(255, 153, 0));
+                        default          -> setForeground(null);
                     }
                 } else {
-                    setForeground(FG_TEXT);
+                    if (status == VulnerabilityStatus.VULNERABLE) {
+                        // Light tint foreground to flag vulnerable request rows slightly
+                        setForeground(new Color(200, 30, 30)); 
+                    } else {
+                        setForeground(null);
+                    }
                 }
             }
-
-            setBorder(new EmptyBorder(1, 8, 1, 8));
-            setFont(column == 2
-                    ? new Font("JetBrains Mono", Font.PLAIN, 11)
-                    : new Font("JetBrains Mono", Font.PLAIN, 12));
             return this;
         }
     }
