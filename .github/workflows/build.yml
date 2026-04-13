@@ -2,31 +2,93 @@ name: Build SessionX JAR
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - '**'
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ main ]
+    branches:
+      - '**'
 
 jobs:
   build:
+    name: Build & Package
     runs-on: ubuntu-latest
 
-    env:
-      JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8"
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: maven
 
-      - name: Build fat JAR
-        run: mvn clean package -DskipTests
+      - name: Build with Maven
+        run: mvn --no-transfer-progress clean package -DskipTests
+
+      - name: Rename artifact
+        run: |
+          mkdir -p dist
+          cp target/sessionx-*.jar dist/SessionX.jar
+          echo "Built JAR:"
+          ls -lh dist/
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: SessionX-jar
-          path: target/sessionx-1.0.jar
+          path: dist/SessionX.jar
+          retention-days: 30
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SessionX-jar
+          path: dist/
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: "SessionX ${{ steps.tag.outputs.TAG }}"
+          body: |
+            ## SessionX ${{ steps.tag.outputs.TAG }}
+
+            ### What's included
+            - `SessionX.jar` — Fat JAR built with Java 17 & Maven Shade Plugin.
+
+            ### Installation
+            1. Open Burp Suite → **Extensions** → **Add**
+            2. Select *Extension Type*: **Java**
+            3. Browse to `SessionX.jar`
+            4. Click **Next** — the "SessionX" tab will appear automatically.
+
+            ### Usage
+            1. Go to the **SessionX** tab
+            2. Click **Configuration**
+            3. Select the headers to test (`Authorization`, `Cookie`, etc.)
+            4. Set replacement values (or leave blank to remove the header)
+            5. Toggle **SessionX: ON** and browse your target
+            6. Watch the table fill with 🔴 Vulnerable / 🟢 Enforced results
+          files: dist/SessionX.jar
+          draft: false
+          prerelease: false

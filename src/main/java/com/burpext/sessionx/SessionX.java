@@ -2,45 +2,34 @@ package com.burpext.sessionx;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
-import com.burpext.sessionx.engine.ProfileManager;
-import com.burpext.sessionx.engine.SessionEngine;
-import com.burpext.sessionx.engine.TokenStore;
-import com.burpext.sessionx.ui.SessionXContextMenu;
-import com.burpext.sessionx.ui.SessionXTab;
+import com.burpext.sessionx.core.TestResultTableModel;
+import com.burpext.sessionx.engine.RequestReplayer;
+import com.burpext.sessionx.ui.MainPanel;
 
 /**
- * SessionX - Burp Suite extension entry point.
+ * SessionX — Header-Based Authorization Bypass Tester
  *
- * Registers:
- *  1. The "SessionX" sidebar tab (profile editor + activity log)
- *  2. The HTTP pipeline handler (token injection on every request)
- *  3. The right-click context menu ("Send to SessionX") in Proxy / Repeater / Target
+ * Entry point registered by Burp Suite via the BurpExtension interface.
+ * Wires together the UI, data model, and proxy listener.
  */
 public class SessionX implements BurpExtension {
 
     @Override
     public void initialize(MontoyaApi api) {
         api.extension().setName("SessionX");
-        api.logging().logToOutput("[SessionX] Starting up...");
 
-        // Core engine components
-        TokenStore     tokenStore     = new TokenStore();
-        ProfileManager profileManager = new ProfileManager(api, tokenStore);
-        SessionEngine  sessionEngine  = new SessionEngine(api, profileManager, tokenStore);
+        // Shared data model
+        TestResultTableModel tableModel = new TestResultTableModel();
 
-        // 1. HTTP handler — token injection across all Burp tools
-        api.http().registerHttpHandler(sessionEngine);
+        // Proxy interceptor + replayer
+        RequestReplayer replayer = new RequestReplayer(api, tableModel);
 
-        // 2. Main UI tab
-        SessionXTab tab = new SessionXTab(api, profileManager, tokenStore);
-        api.userInterface().registerSuiteTab("SessionX", tab.getPanel());
+        // Root UI panel — registers itself as the Burp tab
+        MainPanel mainPanel = new MainPanel(api, tableModel, replayer);
 
-        // 3. Right-click context menu ("Send to SessionX") in Proxy, Repeater, etc.
-        SessionXContextMenu contextMenu = new SessionXContextMenu(api, profileManager, tokenStore);
-        api.userInterface().registerContextMenuItemsProvider(contextMenu);
+        api.userInterface().registerSuiteTab("SessionX", mainPanel);
+        api.http().registerHttpHandler(replayer);
 
-        int profileCount = profileManager.getAllProfiles().size();
-        api.logging().logToOutput(
-            "[SessionX] Loaded successfully - " + profileCount + " profile(s) restored.");
+        api.logging().logToOutput("SessionX loaded — header-based authorization bypass tester ready.");
     }
 }

@@ -1,125 +1,109 @@
-# SessionX — Unified Session Handler for Burp Suite
+# SessionX — Header-Based Authorization Bypass Tester
 
-> **"You configure it once. Then it just works."**
+> **"You configure which headers matter. SessionX handles the rest."**
 
-SessionX is a modern Burp Suite extension that eliminates the session handling pain every pentester faces on every engagement. Instead of stacking 3 extensions and writing regex config for 45 minutes, you describe your session once and SessionX handles the rest — token extraction, multi-location injection, refresh triggering, loop prevention and structured logging.
+SessionX is a professional Burp Suite extension that automates **header substitution authorization bypass testing** — the same workflow you'd follow manually with Autorize, but with surgical multi-header control.
 
----
+## 🎯 The Pain Point It Solves
+
+When testing authorization, you always have a high-priv session and you want to know:
+- Which endpoints respond the same way with a **low-priv token**?
+- Which endpoints still respond with a **blank/removed header** (unauthenticated)?
+- Which endpoints let me **add a custom header** to bypass controls?
+
+Doing this manually means copy-pasting tokens, repeating requests, and eyeballing responses. SessionX does it automatically for every proxied request.
 
 ## ✨ Key Features
 
-### 1. Unified Multi-Token Profile
-One profile covers your entire authentication surface:
-- **Bearer tokens** in `Authorization` headers
-- **Session cookies** (injected into `Cookie` header)
-- **CSRF tokens** (extracted from HTML/JSON, injected in headers or body)
-- **Refresh tokens** (separate credential for re-authentication)
-- **Custom tokens** anywhere you need
+### Multi-Header Interception Rules
+Select **multiple headers** simultaneously, each with its own mode:
 
-### 2. Multi-Step Login Sequence
-Most real-world auth flows aren't a single POST. SessionX handles them in order:
-```
-Step 1: GET /login           → extract CSRF token
-Step 2: POST /login          → use {{step0:CSRF}} in body → get session cookie
-Step 3: POST /api/auth/token → use cookie → get Bearer token
-```
+| Mode | What it does |
+|---|---|
+| **Replace** | Swap the header value (e.g `Authorization: Bearer lowprivtoken`) |
+| **Remove** | Delete the header entirely — tests unauthenticated access |
+| **Add** | Inject a new header that wasn't in the original |
 
-### 3. URL Scope Control (Whitelist / Blacklist)
-Control exactly where the extension fires:
-- **Whitelist mode:** only process URLs matching your patterns
-- **Blacklist mode:** process everything except matched URLs
-- Wildcard support: `*.target.com/api/*`
-- Per-rule enable/disable toggles with comments
+### Autorize-Style Results Table
+Every intercepted request gets a comparison row:
 
-### 4. Explainable Activity Log
-Every action is visible and explained:
-```
-[22:31:44] [REFRESH]  401 from GET /api/users — re-running login for "API Auth"
-[22:31:44] [INFO]     Step 1/2 — GET https://target.com/login → 200 OK
-[22:31:44] [TOKEN]    CSRF extracted (step 1) → a3f9...cd12
-[22:31:45] [TOKEN]    SESSION_COOKIE extracted → PHPSESSID=abc123...
-[22:31:45] [INFO]     Token store updated — injection active
-```
+| # | Method | URL | Orig. Status | Orig. Len | Mod. Status | Mod. Len | Result |
+|---|---|---|---|---|---|---|---|
+| 1 | GET | /api/users/profile | 200 | 1842 | 200 | 1842 | 🔴 Vulnerable |
+| 2 | POST | /api/admin/action | 200 | 412 | 403 | 89 | 🟢 Enforced |
+| 3 | GET | /api/items | 200 | 3200 | 200 | 3100 | 🟡 Interesting |
 
-### 5. Profile Export / Import
-Session configs are portable JSON. Share across your team or reuse across engagements. Import takes 5 seconds.
+### Color-Coded Vulnerability Status
+- **🔴 Vulnerable** — Same status class + content-length within 5% → authorization **not enforced**
+- **🟢 Enforced** — Significant difference in status or length → authorization **is enforced**
+- **🟡 Interesting** — Status matches but length differs 5–20% → **needs manual review**
+- **⏳ Pending** — Modified request still in flight
 
-### 6. In-Memory Token Replacement
-Unlike Burp macros which fire a full login request for **every single proxied request**, SessionX extracts tokens once, stores them in memory, and injects the stored value into subsequent requests. Zero duplicate requests.
+### Per-Request Detail View
+Click any row to see:
+- **Original Tab**: original request & response
+- **Modified Tab**: modified request & response (with what headers were changed)
 
-### 7. Proper JSON + XML Body Injection
-Not just headers and cookies — SessionX correctly replaces tokens inside JSON request bodies using Jackson, XML bodies using DOM parsing, and form-encoded bodies with URL-aware key replacement.
+### Quick-Add Common Headers
+One-click to add `Authorization`, `Cookie`, `X-Api-Key`, `X-Auth-Token`, `X-User-Id`, `X-Forwarded-For` to your rule set.
 
----
+### Smart Filtering
+- Automatically skips static assets (`.js`, `.css`, `.png`, `.jpg`, `.ico`, fonts)
+- Optionally intercept Repeater requests too
+- Toggle ON/OFF without losing results
 
 ## 📦 Installation
 
 1. Download the latest `SessionX.jar` from the [Releases page](https://github.com/zalakamal08/SessionX/releases/latest)
 2. Open Burp Suite
 3. Go to **Extensions → Installed → Add**
-4. Set Extension Type to **Java**, browse to `SessionX.jar`, click **Next**
-5. A **"SessionX"** tab appears in the top bar
+4. Set *Extension Type* to **Java**, browse to `SessionX.jar`, click **Next**
+5. The **SessionX** tab appears in Burp's top bar
 
----
+## 🚀 Quick Start
+
+1. Open the **SessionX** tab → click **Configuration**
+2. Use the quick-add buttons to add `Authorization`
+3. In the Mode column, choose `Replace`
+4. In the Replacement Value column, put your low-priv token: `Bearer lowprivtoken`
+5. *(Optional)* Add another row with `Cookie` → Mode: `Remove` to test unauthenticated
+6. Click **Apply Rules**
+7. Go back to the first tab, click **SessionX: OFF** to toggle it **ON**
+8. Browse your target app as a high-privilege user
+9. Watch the table fill up — 🔴 rows need investigation!
 
 ## 🛠️ Building from Source
 
-Requires JDK 17+ and Maven.
+Requires JDK 17+ and Maven. Build is automatically run by GitHub Actions on every push.
 
 ```bash
-# Clone
 git clone https://github.com/zalakamal08/SessionX.git
 cd SessionX
-
-# Build fat JAR
 mvn clean package -DskipTests
-
-# Output: target/sessionx-1.0.jar
+# Output: target/SessionX.jar
 ```
 
----
+## 📋 How Vulnerability Detection Works
 
-## 🚀 Quick Start — DVWA Example
+For each request, SessionX:
+1. Lets the original request pass through Burp normally
+2. Asynchronously replays a **modified copy** with your header rules applied
+3. Compares the responses:
+   - **Status class match** (both 2xx, both 4xx, etc.)
+   - **Content-length difference** (as a % of original length)
 
-1. **Create a new profile** — click `+ New Profile` in the sidebar
-2. **Login Sequence tab:**
-   - Step 1: `GET https://dvwa.local/login.php` → Label: "Get CSRF"
-   - Step 2: `POST https://dvwa.local/login` → Body: `username=admin&password=password&user_token={{step0:CSRF}}&Login=Login`
-3. **Tokens tab:**
-   - Row 1: Type=CSRF, Extract From=Response Body (HTML), Regex=`user_token.*?value="([^"]+)"`, Step=0, Inject At=Body Form, Key=user_token
-   - Row 2: Type=Session Cookie, Extract From=Response Cookie, Regex=`PHPSESSID=([^;]+)`, Step=1, Inject At=Cookie, Key=PHPSESSID
-4. **Scope tab:** Whitelist → `*.dvwa.local/*`
-5. **Error/Refresh tab:** Status code=`302`, Body keyword=`login.php`, Exclude URL=`/login`
-6. Click **Save**, toggle to **ACTIVE**
-7. Browse DVWA — watch the Activity Log show extractions + injections in real time
-
----
-
-## 📋 Comparison vs Existing Tools
-
-| Feature | Burp Macros | ATOR | SH++ | **SessionX** |
-|---------|------------|------|------|-------------|
-| In-memory token replacement | ❌ | ✅ | ❌ | ✅ |
-| JSON body injection | ❌ | ✅ | Partial | ✅ |
-| Multi-token unified profile | ❌ | ❌ | Partial | ✅ |
-| Multi-step login sequence | Via macros | ✅ | ❌ | ✅ |
-| Whitelist / Blacklist scope | ❌ | ❌ | ❌ | ✅ |
-| Explainable activity log | ❌ | ❌ | ❌ | ✅ |
-| Profile export / import | ❌ | ❌ | ❌ | ✅ |
-
----
+| Condition | Status |
+|---|---|
+| Same status class AND length diff ≤ 5% | 🔴 Vulnerable |
+| Same status class AND length diff 5–20% | 🟡 Interesting |
+| Status class differs OR length diff > 20% | 🟢 Enforced |
 
 ## 🤝 Contributing
 
-Pull requests are welcome!
-
 1. Open an issue describing the bug or feature
 2. Fork the repo and create a branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m 'feat: add your feature'`
-4. Push: `git push origin feature/your-feature`
-5. Open a Pull Request
-
----
+3. Commit: `git commit -m 'feat: description'`
+4. Push and open a Pull Request
 
 ## 📄 License
 
