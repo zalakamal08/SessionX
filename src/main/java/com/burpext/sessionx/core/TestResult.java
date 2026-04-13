@@ -2,7 +2,7 @@ package com.burpext.sessionx.core;
 
 /**
  * Immutable snapshot of test results for a single intercepted request.
- * Holds both the original and modified request/response data.
+ * Holds original, modified, and unauthenticated request/response data.
  */
 public class TestResult {
 
@@ -35,9 +35,14 @@ public class TestResult {
     private volatile int    modLength;
     private volatile byte[] modRequestBytes;
     private volatile byte[] modResponseBytes;
+    private volatile VulnerabilityStatus modVulnStatus;
 
-    // ─── Derived ──────────────────────────────────────────────────────────────
-    private volatile VulnerabilityStatus status;
+    // ─── Unauthenticated request/response ─────────────────────────────────────
+    private volatile int    unauthStatus;
+    private volatile int    unauthLength;
+    private volatile byte[] unauthRequestBytes;
+    private volatile byte[] unauthResponseBytes;
+    private volatile VulnerabilityStatus unauthVulnStatus;
 
     // Used as a running counter
     private static volatile int counter = 0;
@@ -55,38 +60,43 @@ public class TestResult {
         this.origLength        = origLength;
         this.origRequestBytes  = origRequestBytes != null ? origRequestBytes : new byte[0];
         this.origResponseBytes = origResponseBytes != null ? origResponseBytes : new byte[0];
+        
         this.modStatus         = -1;
         this.modLength         = -1;
         this.modRequestBytes   = new byte[0];
         this.modResponseBytes  = new byte[0];
-        this.status            = VulnerabilityStatus.PENDING;
+        this.modVulnStatus     = VulnerabilityStatus.PENDING;
+
+        this.unauthStatus        = -1;
+        this.unauthLength        = -1;
+        this.unauthRequestBytes  = new byte[0];
+        this.unauthResponseBytes = new byte[0];
+        this.unauthVulnStatus    = VulnerabilityStatus.PENDING;
     }
 
-    /** Called by the replayer once the modified response arrives. */
-    public void setModifiedResult(int modStatus,
-                                   int modLength,
-                                   byte[] modRequestBytes,
-                                   byte[] modResponseBytes) {
-        this.modStatus        = modStatus;
-        this.modLength        = modLength;
-        this.modRequestBytes  = modRequestBytes != null ? modRequestBytes : new byte[0];
-        this.modResponseBytes = modResponseBytes != null ? modResponseBytes : new byte[0];
-        this.status           = computeStatus();
+    public synchronized void setModifiedResult(int status, int length, byte[] req, byte[] resp) {
+        this.modStatus        = status;
+        this.modLength        = length;
+        this.modRequestBytes  = req != null ? req : new byte[0];
+        this.modResponseBytes = resp != null ? resp : new byte[0];
+        this.modVulnStatus    = computeStatus(modStatus, modLength);
     }
 
-    /**
-     * Vulnerability heuristic:
-     *   VULNERABLE  — same (or very similar) status code AND content-length within 5%
-     *   INTERESTING — status matches but length differs moderately (5-20% diff)
-     *   ENFORCED    — significant difference in status or length (>20% diff, or 4xx/5xx vs 2xx)
-     */
-    private VulnerabilityStatus computeStatus() {
-        if (modStatus == -1) return VulnerabilityStatus.PENDING;
+    public synchronized void setUnauthResult(int status, int length, byte[] req, byte[] resp) {
+        this.unauthStatus        = status;
+        this.unauthLength        = length;
+        this.unauthRequestBytes  = req != null ? req : new byte[0];
+        this.unauthResponseBytes = resp != null ? resp : new byte[0];
+        this.unauthVulnStatus    = computeStatus(unauthStatus, unauthLength);
+    }
 
-        boolean statusMatch = (origStatus / 100) == (modStatus / 100);   // same class (2xx, 4xx, etc.)
+    private VulnerabilityStatus computeStatus(int targetStatus, int targetLength) {
+        if (targetStatus == -1) return VulnerabilityStatus.PENDING;
+
+        boolean statusMatch = (origStatus / 100) == (targetStatus / 100);
 
         double lengthDiff = origLength == 0 ? 0.0
-                : Math.abs(origLength - modLength) / (double) origLength;
+                : Math.abs(origLength - targetLength) / (double) origLength;
 
         if (statusMatch && lengthDiff <= 0.05) {
             return VulnerabilityStatus.VULNERABLE;
@@ -101,16 +111,32 @@ public class TestResult {
 
     // ─── Getters ──────────────────────────────────────────────────────────────
 
-    public int                  getId()               { return id; }
-    public String               getMethod()           { return method; }
-    public String               getUrl()              { return url; }
-    public int                  getOrigStatus()       { return origStatus; }
-    public int                  getOrigLength()       { return origLength; }
-    public byte[]               getOrigRequestBytes() { return origRequestBytes; }
-    public byte[]               getOrigResponseBytes(){ return origResponseBytes; }
-    public int                  getModStatus()        { return modStatus; }
-    public int                  getModLength()        { return modLength; }
-    public byte[]               getModRequestBytes()  { return modRequestBytes; }
-    public byte[]               getModResponseBytes() { return modResponseBytes; }
-    public VulnerabilityStatus  getStatus()           { return status; }
+    public int                  getId()                { return id; }
+    public String               getMethod()            { return method; }
+    public String               getUrl()               { return url; }
+    
+    public int                  getOrigStatus()        { return origStatus; }
+    public int                  getOrigLength()        { return origLength; }
+    public byte[]               getOrigRequestBytes()  { return origRequestBytes; }
+    public byte[]               getOrigResponseBytes() { return origResponseBytes; }
+    
+    public int                  getModStatus()         { return modStatus; }
+    public int                  getModLength()         { return modLength; }
+    public byte[]               getModRequestBytes()   { return modRequestBytes; }
+    public byte[]               getModResponseBytes()  { return modResponseBytes; }
+    public VulnerabilityStatus  getModVulnStatus()     { return modVulnStatus; }
+
+    public int                  getUnauthStatus()         { return unauthStatus; }
+    public int                  getUnauthLength()         { return unauthLength; }
+    public byte[]               getUnauthRequestBytes()   { return unauthRequestBytes; }
+    public byte[]               getUnauthResponseBytes()  { return unauthResponseBytes; }
+    public VulnerabilityStatus  getUnauthVulnStatus()     { return unauthVulnStatus; }
+
+    // Helper for table combined status
+    public String getCombinedStatus() {
+        if (modVulnStatus == VulnerabilityStatus.PENDING && unauthVulnStatus == VulnerabilityStatus.PENDING) {
+            return "⏳ Pending";
+        }
+        return String.format("MOD: %s | UNAUTH: %s", modVulnStatus.toString(), unauthVulnStatus.toString());
+    }
 }

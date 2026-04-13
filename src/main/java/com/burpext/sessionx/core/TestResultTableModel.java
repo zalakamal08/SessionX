@@ -13,14 +13,13 @@ public class TestResultTableModel extends AbstractTableModel {
 
     private static final String[] COLUMNS = {
         "#", "Method", "URL", "Orig. Status", "Orig. Len",
-        "Mod. Status", "Mod. Len", "Result"
+        "Mod. Status", "Mod. Len", "Unauth. Status", "Unauth. Len", "Result"
     };
 
     private final List<TestResult> rows = new ArrayList<>();
 
     // ─── Mutation API ─────────────────────────────────────────────────────────
 
-    /** Add a new (pending) result row. Must be called from any thread. */
     public int addResult(TestResult result) {
         final int[] indexHolder = {-1};
         final Runnable r = () -> {
@@ -36,12 +35,10 @@ public class TestResultTableModel extends AbstractTableModel {
         return indexHolder[0];
     }
 
-    /** Notify the table that a row's modified response has arrived. */
     public void rowUpdated(int rowIndex) {
         SwingUtilities.invokeLater(() -> fireTableRowsUpdated(rowIndex, rowIndex));
     }
 
-    /** Clear all rows. */
     public void clear() {
         SwingUtilities.invokeLater(() -> {
             int last = rows.size() - 1;
@@ -69,7 +66,9 @@ public class TestResultTableModel extends AbstractTableModel {
             case 4 -> r.getOrigLength();
             case 5 -> r.getModStatus() == -1 ? "—" : r.getModStatus();
             case 6 -> r.getModLength() == -1 ? "—" : r.getModLength();
-            case 7 -> r.getStatus().toString();
+            case 7 -> r.getUnauthStatus() == -1 ? "—" : r.getUnauthStatus();
+            case 8 -> r.getUnauthLength() == -1 ? "—" : r.getUnauthLength();
+            case 9 -> r.getCombinedStatus();
             default -> null;
         };
     }
@@ -82,7 +81,6 @@ public class TestResultTableModel extends AbstractTableModel {
         };
     }
 
-    /** Get the TestResult object for the given row. */
     public TestResult getResult(int row) {
         if (row < 0 || row >= rows.size()) return null;
         return rows.get(row);

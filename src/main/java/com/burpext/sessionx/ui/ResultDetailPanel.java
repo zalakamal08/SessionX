@@ -20,6 +20,10 @@ public class ResultDetailPanel extends JPanel {
     private final JTextArea modRequestArea   = makeTextArea();
     private final JTextArea modResponseArea  = makeTextArea();
 
+    // Unauthenticated tab
+    private final JTextArea unauthRequestArea   = makeTextArea();
+    private final JTextArea unauthResponseArea  = makeTextArea();
+
     // Status banner
     private final JLabel statusBanner = new JLabel(" ", SwingConstants.CENTER);
 
@@ -36,6 +40,7 @@ public class ResultDetailPanel extends JPanel {
         tabs = new JTabbedPane(JTabbedPane.TOP);
         tabs.addTab("Original",      buildSplitPane(origRequestArea, origResponseArea));
         tabs.addTab("Modified",      buildSplitPane(modRequestArea,  modResponseArea));
+        tabs.addTab("Unauthenticated", buildSplitPane(unauthRequestArea, unauthResponseArea));
         add(tabs, BorderLayout.CENTER);
 
         showEmpty();
@@ -44,14 +49,17 @@ public class ResultDetailPanel extends JPanel {
     public void show(TestResult result) {
         if (result == null) { showEmpty(); return; }
 
-        VulnerabilityStatus status = result.getStatus();
         statusBanner.setText(buildBannerText(result));
         
-        switch (status) {
-            case VULNERABLE  -> statusBanner.setForeground(new Color(220, 53, 69)); // Minimal Red
-            case ENFORCED    -> statusBanner.setForeground(new Color(40, 167, 69)); // Minimal Green
-            case INTERESTING -> statusBanner.setForeground(new Color(255, 153, 0));  // Minimal Orange
-            default          -> statusBanner.setForeground(null); // Default
+        VulnerabilityStatus modStatus = result.getModVulnStatus();
+        VulnerabilityStatus unauthStatus = result.getUnauthVulnStatus();
+
+        if (modStatus == VulnerabilityStatus.VULNERABLE || unauthStatus == VulnerabilityStatus.VULNERABLE) {
+            statusBanner.setForeground(new Color(220, 53, 69)); // Minimal Red
+        } else if (modStatus == VulnerabilityStatus.ENFORCED && unauthStatus == VulnerabilityStatus.ENFORCED) {
+            statusBanner.setForeground(new Color(40, 167, 69)); // Minimal Green
+        } else {
+            statusBanner.setForeground(new Color(255, 153, 0));  // Minimal Orange
         }
 
         origRequestArea.setText(bytesToString(result.getOrigRequestBytes()));
@@ -66,6 +74,14 @@ public class ResultDetailPanel extends JPanel {
                         : bytesToString(result.getModResponseBytes()));
         modRequestArea.setCaretPosition(0);
         modResponseArea.setCaretPosition(0);
+
+        unauthRequestArea.setText(bytesToString(result.getUnauthRequestBytes()));
+        unauthResponseArea.setText(
+                result.getUnauthStatus() == -1
+                        ? "(Unauthenticated response not yet received...)"
+                        : bytesToString(result.getUnauthResponseBytes()));
+        unauthRequestArea.setCaretPosition(0);
+        unauthResponseArea.setCaretPosition(0);
     }
 
     public void clear() { showEmpty(); }
@@ -77,16 +93,19 @@ public class ResultDetailPanel extends JPanel {
         origResponseArea.setText("");
         modRequestArea.setText("");
         modResponseArea.setText("");
+        unauthRequestArea.setText("");
+        unauthResponseArea.setText("");
     }
 
     private String buildBannerText(TestResult r) {
         String base = "#" + r.getId() + "  " + r.getMethod() + "  " + r.getUrl();
-        if (r.getModStatus() == -1) return base + "   [replaying…]";
-        return String.format("%s   |   Orig: %d / %d bytes   →   Mod: %d / %d bytes   |   %s",
+        if (r.getModStatus() == -1 || r.getUnauthStatus() == -1) return base + "   [replaying…]";
+        return String.format("%s   |   Orig: %d / %dB  →  Mod: %d / %dB  →  Unauth: %d / %dB   |   %s",
                 base,
                 r.getOrigStatus(), r.getOrigLength(),
                 r.getModStatus(), r.getModLength(),
-                r.getStatus());
+                r.getUnauthStatus(), r.getUnauthLength(),
+                r.getCombinedStatus());
     }
 
     private JSplitPane buildSplitPane(JTextArea top, JTextArea bottom) {

@@ -36,8 +36,7 @@ public class MainPanel extends JPanel {
         toggleBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JButton clearBtn = new JButton("Clear Table");
-        
-        statsLabel = new JLabel("  Rows: 0   |   🔴 0   🟢 0   🟡 0");
+        statsLabel = new JLabel("  Rows: 0   |   MOD: 🔴 0  🟢 0  🟡 0   |   UNAUTH: 🔴 0  🟢 0  🟡 0");
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
         toolbar.add(toggleBtn);
@@ -119,12 +118,14 @@ public class MainPanel extends JPanel {
         table.getColumnModel().getColumn(0).setMaxWidth(50);
         table.getColumnModel().getColumn(1).setPreferredWidth(60);
         table.getColumnModel().getColumn(1).setMaxWidth(80);
-        table.getColumnModel().getColumn(2).setPreferredWidth(320);
+        table.getColumnModel().getColumn(2).setPreferredWidth(300);
         table.getColumnModel().getColumn(3).setPreferredWidth(70);
-        table.getColumnModel().getColumn(4).setPreferredWidth(80);
+        table.getColumnModel().getColumn(4).setPreferredWidth(60);
         table.getColumnModel().getColumn(5).setPreferredWidth(70);
-        table.getColumnModel().getColumn(6).setPreferredWidth(80);
-        table.getColumnModel().getColumn(7).setPreferredWidth(130);
+        table.getColumnModel().getColumn(6).setPreferredWidth(60);
+        table.getColumnModel().getColumn(7).setPreferredWidth(70);
+        table.getColumnModel().getColumn(8).setPreferredWidth(60);
+        table.getColumnModel().getColumn(9).setPreferredWidth(210);
 
         TableRowSorter<TestResultTableModel> sorter = new TableRowSorter<>(tableModel);
         table.setRowSorter(sorter);
@@ -137,19 +138,26 @@ public class MainPanel extends JPanel {
     }
 
     private void refreshStats() {
-        int total = 0, vuln = 0, enforced = 0, interesting = 0;
+        int total = 0;
+        int modVuln = 0, modEnf = 0, modInt = 0;
+        int unauthVuln = 0, unauthEnf = 0, unauthInt = 0;
         for (int i = 0; i < tableModel.getRowCount(); i++) {
             TestResult r = tableModel.getResult(i);
             if (r == null) continue;
             total++;
-            switch (r.getStatus()) {
-                case VULNERABLE   -> vuln++;
-                case ENFORCED     -> enforced++;
-                case INTERESTING  -> interesting++;
+            switch (r.getModVulnStatus()) {
+                case VULNERABLE   -> modVuln++;
+                case ENFORCED     -> modEnf++;
+                case INTERESTING  -> modInt++;
+            }
+            switch (r.getUnauthVulnStatus()) {
+                case VULNERABLE   -> unauthVuln++;
+                case ENFORCED     -> unauthEnf++;
+                case INTERESTING  -> unauthInt++;
             }
         }
-        statsLabel.setText(String.format("  Rows: %d   |   🔴 %d   🟢 %d   🟡 %d",
-                total, vuln, enforced, interesting));
+        statsLabel.setText(String.format("  Rows: %d   |   MOD: 🔴 %d  🟢 %d  🟡 %d   |   UNAUTH: 🔴 %d  🟢 %d  🟡 %d",
+                total, modVuln, modEnf, modInt, unauthVuln, unauthEnf, unauthInt));
     }
 
     private void showContextMenu(MouseEvent e) {
@@ -180,16 +188,12 @@ public class MainPanel extends JPanel {
             TestResult result = tableModel.getResult(modelRow);
 
             if (!isSelected && result != null) {
-                VulnerabilityStatus status = result.getStatus();
-                if (column == 7) {
-                    switch (status) {
-                        case VULNERABLE  -> setForeground(new Color(220, 53, 69));
-                        case ENFORCED    -> setForeground(new Color(40, 167, 69));
-                        case INTERESTING -> setForeground(new Color(255, 153, 0));
-                        default          -> setForeground(null);
-                    }
+                VulnerabilityStatus modStatus = result.getModVulnStatus();
+                VulnerabilityStatus unauthStatus = result.getUnauthVulnStatus();
+                if (column == 9) {
+                    setForeground(null);
                 } else {
-                    if (status == VulnerabilityStatus.VULNERABLE) {
+                    if (modStatus == VulnerabilityStatus.VULNERABLE || unauthStatus == VulnerabilityStatus.VULNERABLE) {
                         // Light tint foreground to flag vulnerable request rows slightly
                         setForeground(new Color(200, 30, 30)); 
                     } else {

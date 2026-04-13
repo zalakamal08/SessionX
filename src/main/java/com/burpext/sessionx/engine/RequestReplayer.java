@@ -108,8 +108,11 @@ public class RequestReplayer implements HttpHandler {
         TestResult result = new TestResult(method, url, origStatus, origLen, origReqBytes, origRespBytes);
         int rowIndex = tableModel.addResult(result);
 
-        // Fire modified request in background
-        executor.submit(() -> replayModified(result, rowIndex, origRequest, activeRules));
+        // Fire modified and unauth requests in background
+        executor.submit(() -> {
+            replayModified(result, rowIndex, origRequest, activeRules);
+            replayUnauth(result, rowIndex, origRequest, activeRules);
+        });
 
         return ResponseReceivedAction.continueWith(responseReceived);
     }
@@ -135,7 +138,30 @@ public class RequestReplayer implements HttpHandler {
             tableModel.rowUpdated(rowIndex);
 
         } catch (Exception e) {
-            api.logging().logToError("SessionX replay error for " + result.getUrl() + ": " + e.getMessage());
+            api.logging().logToError("SessionX mod replay error for " + result.getUrl() + ": " + e.getMessage());
+        }
+    }
+
+    private void replayUnauth(TestResult result,
+                              int rowIndex,
+                              HttpRequest origRequest,
+                              List<HeaderRule> activeRules) {
+        try {
+            HttpRequest unauthRequest = applyUnauthRules(origRequest, activeRules);
+            byte[] unauthReqBytes = unauthRequest.toByteArray().getBytes();
+
+            var unauthHttpResponse = api.http().sendRequest(unauthRequest);
+            HttpResponse unauthResponse = unauthHttpResponse.response();
+
+            int    unauthStatus   = unauthResponse != null ? unauthResponse.statusCode()   : -1;
+            int    unauthLen      = unauthResponse != null ? unauthResponse.body().length() : -1;
+            byte[] unauthRespBytes = unauthResponse != null ? unauthResponse.toByteArray().getBytes() : new byte[0];
+
+            result.setUnauthResult(unauthStatus, unauthLen, unauthReqBytes, unauthRespBytes);
+            tableModel.rowUpdated(rowIndex);
+
+        } catch (Exception e) {
+            api.logging().logToError("SessionX unauth replay error for " + result.getUrl() + ": " + e.getMessage());
         }
     }
 
@@ -179,6 +205,19 @@ public class RequestReplayer implements HttpHandler {
             }
         }
         return modified;
+    }
+
+    private HttpRequest applyUnauthRules(HttpRequest request, List<HeaderRule> rules) {
+        HttpRequest unauth = request;
+        for (HeaderRule rule : rules) {
+            String name = rule.getHeaderName();
+            boolean found = unauth.headers().stream()
+                    .anyMatch(h -> h.name().equalsIgnoreCase(name));
+            if (found) {
+                unauth = unauth.withUpdatedHeader(name, "");
+            }
+        }
+        return unauth;
     }
 
     private List<HeaderRule> getActiveRules() {
