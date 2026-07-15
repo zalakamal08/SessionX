@@ -53,7 +53,7 @@ public class MainPanel extends JPanel {
         setLayout(new BorderLayout());
 
         // Initialize detail panel first (referenced in lambdas below)
-        detailPanel = new ResultDetailPanel();
+        detailPanel = new ResultDetailPanel(api);
 
         // View models backed by the same store
         modModel    = new ModifiedTableModel(store);

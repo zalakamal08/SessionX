@@ -1,146 +1,249 @@
 package com.burpext.sessionx.ui;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.core.ByteArray;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.responses.HttpResponse;
+import burp.api.montoya.ui.editor.EditorOptions;
+import burp.api.montoya.ui.editor.HttpRequestEditor;
+import burp.api.montoya.ui.editor.HttpResponseEditor;
 import com.burpext.sessionx.core.TestResult;
 import com.burpext.sessionx.core.TestResult.VulnerabilityStatus;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import java.awt.*;
-import java.nio.charset.StandardCharsets;
 
+/**
+ * Detail view for a single test result.
+ *
+ * Uses Burp's native Montoya HTTP editors (Pretty / Raw / Hex, syntax
+ * highlighting, search, message inspector) instead of plain text areas, and
+ * shows an at-a-glance comparison header across the three request variants.
+ */
 public class ResultDetailPanel extends JPanel {
+
+    // Verdict colors (shared with the result tables)
+    private static final Color C_VULN     = new Color(0xC0, 0x2A, 0x38);
+    private static final Color C_ENFORCED = new Color(0x1E, 0x7E, 0x34);
+    private static final Color C_INTEREST = new Color(0xB8, 0x6E, 0x00);
+    private static final Color C_PENDING  = new Color(0x6C, 0x75, 0x7D);
+    private static final Color C_CARD_BG   = new Color(0xF7, 0xF7, 0xF7);
+    private static final Color C_CARD_LINE = new Color(0xDD, 0xDD, 0xDD);
+
+    private final MontoyaApi api;
+
+    private final JLabel idLabel     = new JLabel(" ");
+    private final JLabel methodLabel = new JLabel(" ");
+    private final JLabel urlLabel    = new JLabel(" ");
+
+    // Comparison cards
+    private final Card origCard   = new Card("ORIGINAL");
+    private final Card modCard    = new Card("MODIFIED");
+    private final Card unauthCard = new Card("UNAUTH");
+
+    // Native Burp editors (read-only)
+    private final HttpRequestEditor  origRequest;
+    private final HttpResponseEditor origResponse;
+    private final HttpRequestEditor  modRequest;
+    private final HttpResponseEditor modResponse;
+    private final HttpRequestEditor  unauthRequest;
+    private final HttpResponseEditor unauthResponse;
 
     private final JTabbedPane tabs;
 
-    // Original tab
-    private final JTextArea origRequestArea  = makeTextArea();
-    private final JTextArea origResponseArea = makeTextArea();
+    public ResultDetailPanel(MontoyaApi api) {
+        this.api = api;
 
-    // Modified tab
-    private final JTextArea modRequestArea   = makeTextArea();
-    private final JTextArea modResponseArea  = makeTextArea();
+        origRequest    = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
+        origResponse   = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
+        modRequest     = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
+        modResponse    = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
+        unauthRequest  = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
+        unauthResponse = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
 
-    // Unauthenticated tab
-    private final JTextArea unauthRequestArea   = makeTextArea();
-    private final JTextArea unauthResponseArea  = makeTextArea();
-
-    // Status banner
-    private final JLabel statusBanner = new JLabel(" ", SwingConstants.CENTER);
-
-    public ResultDetailPanel() {
         setLayout(new BorderLayout());
 
-        // Status banner at top
-        statusBanner.setFont(new Font(Font.MONOSPACED, Font.BOLD, 13));
-        statusBanner.setOpaque(true);
-        statusBanner.setBorder(new EmptyBorder(8, 12, 8, 12));
-        add(statusBanner, BorderLayout.NORTH);
+        add(buildHeader(), BorderLayout.NORTH);
 
-        // Tabs
         tabs = new JTabbedPane(JTabbedPane.TOP);
-        tabs.addTab("Original",      buildSplitPane(origRequestArea, origResponseArea));
-        tabs.addTab("Modified",      buildSplitPane(modRequestArea,  modResponseArea));
-        tabs.addTab("Unauthenticated", buildSplitPane(unauthRequestArea, unauthResponseArea));
+        tabs.addTab("Original",        buildSplit(origRequest, origResponse));
+        tabs.addTab("Modified",        buildSplit(modRequest, modResponse));
+        tabs.addTab("Unauthenticated", buildSplit(unauthRequest, unauthResponse));
         add(tabs, BorderLayout.CENTER);
 
         showEmpty();
     }
 
+    // ── Public API ──────────────────────────────────────────────────────────
+
     public void show(TestResult result) {
         if (result == null) { showEmpty(); return; }
 
-        statusBanner.setText(buildBannerText(result));
-        
-        VulnerabilityStatus modStatus = result.getModVulnStatus();
-        VulnerabilityStatus unauthStatus = result.getUnauthVulnStatus();
+        idLabel.setText("#" + result.getId());
+        methodLabel.setText(result.getMethod());
+        urlLabel.setText(result.getUrl());
+        urlLabel.setToolTipText(result.getUrl());
 
-        if (modStatus == VulnerabilityStatus.VULNERABLE || unauthStatus == VulnerabilityStatus.VULNERABLE) {
-            statusBanner.setForeground(new Color(220, 53, 69)); // Minimal Red
-        } else if (modStatus == VulnerabilityStatus.ENFORCED && unauthStatus == VulnerabilityStatus.ENFORCED) {
-            statusBanner.setForeground(new Color(40, 167, 69)); // Minimal Green
-        } else {
-            statusBanner.setForeground(new Color(255, 153, 0));  // Minimal Orange
-        }
+        origCard.set(result.getOrigStatus(), result.getOrigLength(), null);
+        modCard.set(result.getModStatus(), result.getModLength(), result.getModVulnStatus());
+        unauthCard.set(result.getUnauthStatus(), result.getUnauthLength(), result.getUnauthVulnStatus());
 
-        origRequestArea.setText(bytesToString(result.getOrigRequestBytes()));
-        origResponseArea.setText(bytesToString(result.getOrigResponseBytes()));
-        origRequestArea.setCaretPosition(0);
-        origResponseArea.setCaretPosition(0);
-
-        modRequestArea.setText(bytesToString(result.getModRequestBytes()));
-        modResponseArea.setText(
-                result.getModStatus() == -1
-                        ? "(Modified response not yet received...)"
-                        : bytesToString(result.getModResponseBytes()));
-        modRequestArea.setCaretPosition(0);
-        modResponseArea.setCaretPosition(0);
-
-        unauthRequestArea.setText(bytesToString(result.getUnauthRequestBytes()));
-        unauthResponseArea.setText(
-                result.getUnauthStatus() == -1
-                        ? "(Unauthenticated response not yet received...)"
-                        : bytesToString(result.getUnauthResponseBytes()));
-        unauthRequestArea.setCaretPosition(0);
-        unauthResponseArea.setCaretPosition(0);
+        setRequest(origRequest, result.getOrigRequestBytes());
+        setResponse(origResponse, result.getOrigResponseBytes());
+        setRequest(modRequest, result.getModRequestBytes());
+        setResponse(modResponse, result.getModStatus() == -1 ? null : result.getModResponseBytes());
+        setRequest(unauthRequest, result.getUnauthRequestBytes());
+        setResponse(unauthResponse, result.getUnauthStatus() == -1 ? null : result.getUnauthResponseBytes());
     }
 
     public void clear() { showEmpty(); }
 
     /** Pre-select a tab by index: 0=Original, 1=Modified, 2=Unauthenticated */
     public void selectTab(int index) {
-        if (index >= 0 && index < tabs.getTabCount()) {
-            tabs.setSelectedIndex(index);
-        }
+        if (index >= 0 && index < tabs.getTabCount()) tabs.setSelectedIndex(index);
     }
 
-    private void showEmpty() {
-        statusBanner.setText("Select a row to inspect the request/response pair");
-        statusBanner.setForeground(null);
-        origRequestArea.setText("");
-        origResponseArea.setText("");
-        modRequestArea.setText("");
-        modResponseArea.setText("");
-        unauthRequestArea.setText("");
-        unauthResponseArea.setText("");
+    // ── UI construction ─────────────────────────────────────────────────────
+
+    private JComponent buildHeader() {
+        JPanel header = new JPanel(new BorderLayout(0, 6));
+        header.setBorder(new EmptyBorder(8, 10, 8, 10));
+
+        // Title line: #id  METHOD  URL
+        idLabel.setFont(idLabel.getFont().deriveFont(Font.BOLD, 13f));
+        idLabel.setForeground(C_PENDING);
+        methodLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
+        methodLabel.setForeground(new Color(0x2A, 0x5D, 0xB0));
+        urlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+        JPanel title = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        title.add(idLabel);
+        title.add(methodLabel);
+        title.add(urlLabel);
+
+        // Comparison cards
+        JPanel cards = new JPanel(new GridLayout(1, 3, 8, 0));
+        cards.add(origCard);
+        cards.add(modCard);
+        cards.add(unauthCard);
+
+        header.add(title, BorderLayout.NORTH);
+        header.add(cards, BorderLayout.CENTER);
+        return header;
     }
 
-    private String buildBannerText(TestResult r) {
-        String base = "#" + r.getId() + "  " + r.getMethod() + "  " + r.getUrl();
-        if (r.getModStatus() == -1 || r.getUnauthStatus() == -1) return base + "   [replaying…]";
-        return String.format("%s   |   Orig: %d / %dB  →  Mod: %d / %dB  →  Unauth: %d / %dB   |   %s",
-                base,
-                r.getOrigStatus(), r.getOrigLength(),
-                r.getModStatus(), r.getModLength(),
-                r.getUnauthStatus(), r.getUnauthLength(),
-                r.getCombinedStatus());
-    }
-
-    private JSplitPane buildSplitPane(JTextArea top, JTextArea bottom) {
+    private JSplitPane buildSplit(HttpRequestEditor req, HttpResponseEditor resp) {
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                labelledScroll("Request",  top),
-                labelledScroll("Response", bottom));
+                titled("Request", req.uiComponent()),
+                titled("Response", resp.uiComponent()));
         split.setResizeWeight(0.5);
+        split.setDividerSize(4);
         return split;
     }
 
-    private JPanel labelledScroll(String label, JTextArea area) {
-        JScrollPane scroll = new JScrollPane(area);
+    private JPanel titled(String label, Component body) {
+        JLabel header = new JLabel("  " + label);
+        header.setFont(header.getFont().deriveFont(Font.BOLD, 11f));
+        header.setForeground(C_PENDING);
+        header.setBorder(new EmptyBorder(3, 2, 3, 2));
+
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(label));
-        panel.add(scroll, BorderLayout.CENTER);
+        panel.add(header, BorderLayout.NORTH);
+        panel.add(body, BorderLayout.CENTER);
         return panel;
     }
 
-    private static JTextArea makeTextArea() {
-        JTextArea ta = new JTextArea();
-        ta.setEditable(false);
-        ta.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        ta.setLineWrap(false);
-        return ta;
+    // ── State helpers ───────────────────────────────────────────────────────
+
+    private void showEmpty() {
+        idLabel.setText("—");
+        methodLabel.setText("");
+        urlLabel.setText("Select a row to inspect the request / response pair");
+        urlLabel.setToolTipText(null);
+        origCard.reset();
+        modCard.reset();
+        unauthCard.reset();
+        setRequest(origRequest, null);
+        setResponse(origResponse, null);
+        setRequest(modRequest, null);
+        setResponse(modResponse, null);
+        setRequest(unauthRequest, null);
+        setResponse(unauthResponse, null);
     }
 
-    private static String bytesToString(byte[] bytes) {
-        if (bytes == null || bytes.length == 0) return "";
-        return new String(bytes, StandardCharsets.UTF_8);
+    private void setRequest(HttpRequestEditor editor, byte[] bytes) {
+        try {
+            editor.setRequest(HttpRequest.httpRequest(
+                    ByteArray.byteArray(bytes != null ? bytes : new byte[0])));
+        } catch (Exception ignored) {
+            // Malformed bytes — leave the editor unchanged rather than crash the UI.
+        }
+    }
+
+    private void setResponse(HttpResponseEditor editor, byte[] bytes) {
+        try {
+            editor.setResponse(HttpResponse.httpResponse(
+                    ByteArray.byteArray(bytes != null ? bytes : new byte[0])));
+        } catch (Exception ignored) {
+            // Malformed bytes — leave the editor unchanged rather than crash the UI.
+        }
+    }
+
+    private static Color colorFor(VulnerabilityStatus status) {
+        if (status == null) return C_PENDING;
+        return switch (status) {
+            case VULNERABLE  -> C_VULN;
+            case ENFORCED    -> C_ENFORCED;
+            case INTERESTING -> C_INTEREST;
+            default          -> C_PENDING;
+        };
+    }
+
+    /** Compact card showing status code, byte length, and (optionally) the verdict. */
+    private static class Card extends JPanel {
+        private final JLabel value  = new JLabel("—", SwingConstants.CENTER);
+        private final JLabel verdict = new JLabel(" ", SwingConstants.CENTER);
+
+        Card(String heading) {
+            setLayout(new BorderLayout());
+            setBackground(C_CARD_BG);
+            setBorder(new CompoundBorder(
+                    new LineBorder(C_CARD_LINE, 1, true),
+                    new EmptyBorder(5, 8, 5, 8)));
+
+            JLabel title = new JLabel(heading, SwingConstants.CENTER);
+            title.setFont(title.getFont().deriveFont(Font.BOLD, 10f));
+            title.setForeground(C_PENDING);
+
+            value.setFont(new Font(Font.MONOSPACED, Font.BOLD, 13));
+            verdict.setFont(verdict.getFont().deriveFont(Font.BOLD, 10f));
+
+            add(title, BorderLayout.NORTH);
+            add(value, BorderLayout.CENTER);
+            add(verdict, BorderLayout.SOUTH);
+        }
+
+        void set(int status, int length, VulnerabilityStatus vuln) {
+            if (status == -1) {
+                value.setText("replaying…");
+                value.setForeground(C_PENDING);
+                verdict.setText(" ");
+                return;
+            }
+            value.setText(status + "  ·  " + length + " B");
+            Color c = colorFor(vuln);
+            value.setForeground(vuln == null ? Color.DARK_GRAY : c);
+            verdict.setText(vuln == null ? "baseline" : vuln.toString());
+            verdict.setForeground(vuln == null ? C_PENDING : c);
+        }
+
+        void reset() {
+            value.setText("—");
+            value.setForeground(C_PENDING);
+            verdict.setText(" ");
+        }
     }
 }
