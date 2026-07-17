@@ -11,8 +11,12 @@ import com.burpext.sessionx.engine.RequestReplayer;
 import com.burpext.sessionx.io.ResultsExporter;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.JTableHeader;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
@@ -32,17 +36,26 @@ public class MainPanel extends JPanel {
     private static final Color FG_ENFORCED = new Color(0x00, 0x55, 0x00);
     private static final Color FG_INTEREST = new Color(0x7A, 0x50, 0x00);
 
+    private static final Color C_ON    = new Color(0x1E, 0x7E, 0x34);
+    private static final Color C_OFF   = new Color(0x6C, 0x75, 0x7D);
+    private static final Color C_VULN_TXT = new Color(0xC0, 0x2A, 0x38);
+
     private final MontoyaApi           api;
     private final TestResultTableModel store;
     private final RequestReplayer      replayer;
 
     private final JToggleButton proxyToggle;
     private final JToggleButton repeaterToggle;
+    private final JTextField    filterField      = new JTextField(18);
+    private final JCheckBox     vulnOnlyCheck    = new JCheckBox("Vulnerable only");
+    private final JLabel        statsLabel       = new JLabel();
 
     private final ModifiedTableModel modModel;
     private final UnauthTableModel   unauthModel;
     private final JTable             modTable;
     private final JTable             unauthTable;
+    private final TableRowSorter<AbstractTableModel> modSorter;
+    private final TableRowSorter<AbstractTableModel> unauthSorter;
     final         ResultDetailPanel  detailPanel;
 
     public MainPanel(MontoyaApi api, TestResultTableModel store, RequestReplayer replayer) {
@@ -59,57 +72,79 @@ public class MainPanel extends JPanel {
         modModel    = new ModifiedTableModel(store);
         unauthModel = new UnauthTableModel(store);
 
-        // Toolbar
-        proxyToggle    = new JToggleButton("Proxy: OFF");
-        repeaterToggle = new JToggleButton("Repeater: OFF");
-        JButton clearBtn  = new JButton("Clear");
-        JButton exportBtn = new JButton("Export Results...");
-
+        // Interception toggles
+        proxyToggle    = new JToggleButton("Proxy");
+        repeaterToggle = new JToggleButton("Repeater");
         proxyToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         repeaterToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
+        styleToggle(proxyToggle, "Proxy");
+        styleToggle(repeaterToggle, "Repeater");
         proxyToggle.addActionListener(e -> {
-            boolean on = proxyToggle.isSelected();
-            replayer.setInterceptProxy(on);
-            proxyToggle.setText(on ? "Proxy: ON " : "Proxy: OFF");
+            replayer.setInterceptProxy(proxyToggle.isSelected());
+            styleToggle(proxyToggle, "Proxy");
         });
         repeaterToggle.addActionListener(e -> {
-            boolean on = repeaterToggle.isSelected();
-            replayer.setInterceptRepeater(on);
-            repeaterToggle.setText(on ? "Repeater: ON " : "Repeater: OFF");
+            replayer.setInterceptRepeater(repeaterToggle.isSelected());
+            styleToggle(repeaterToggle, "Repeater");
         });
+
+        // Filter controls
+        filterField.setToolTipText("Filter results by URL");
+        filterField.putClientProperty("JTextField.placeholderText", "Filter URL…");
+        filterField.getDocument().addDocumentListener((SimpleDocListener) e -> applyFilters());
+        vulnOnlyCheck.addActionListener(e -> applyFilters());
+
+        JButton clearBtn  = new JButton("Clear");
+        JButton exportBtn = new JButton("Export CSV…");
         clearBtn.addActionListener(e -> { store.clear(); detailPanel.clear(); });
         exportBtn.addActionListener(e -> exportResults());
 
-        JLabel scopeNote = new JLabel("  In-scope only");
-        scopeNote.setForeground(Color.DARK_GRAY);
-        scopeNote.setFont(scopeNote.getFont().deriveFont(Font.ITALIC, 11f));
+        statsLabel.setForeground(C_OFF);
+        statsLabel.setBorder(new EmptyBorder(0, 4, 0, 8));
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 5));
+        // Toolbar: [ Intercept: Proxy Repeater ] | [ filter  vuln-only ] .... [ stats  Clear Export ]
+        JToolBar toolbar = new JToolBar();
+        toolbar.setFloatable(false);
+        toolbar.setBorder(new EmptyBorder(4, 8, 4, 8));
+        JLabel interceptLbl = new JLabel("Intercept:");
+        interceptLbl.setForeground(C_OFF);
+        toolbar.add(interceptLbl);
+        toolbar.add(Box.createHorizontalStrut(6));
         toolbar.add(proxyToggle);
+        toolbar.add(Box.createHorizontalStrut(4));
         toolbar.add(repeaterToggle);
-        toolbar.add(new JSeparator(SwingConstants.VERTICAL));
+        toolbar.addSeparator();
+        toolbar.add(new JLabel("  "));
+        toolbar.add(filterField);
+        toolbar.add(Box.createHorizontalStrut(8));
+        toolbar.add(vulnOnlyCheck);
+        toolbar.add(Box.createHorizontalGlue());
+        toolbar.add(statsLabel);
         toolbar.add(clearBtn);
+        toolbar.add(Box.createHorizontalStrut(4));
         toolbar.add(exportBtn);
-        toolbar.add(scopeNote);
 
         // Tables
         modTable    = buildTable(modModel,    false);
         unauthTable = buildTable(unauthModel, true);
+        modSorter    = new TableRowSorter<>(modModel);
+        unauthSorter = new TableRowSorter<>(unauthModel);
+        modTable.setRowSorter(modSorter);
+        unauthTable.setRowSorter(unauthSorter);
 
         JTabbedPane resultTabs = new JTabbedPane();
         resultTabs.addTab("Modified Results",        new JScrollPane(modTable));
         resultTabs.addTab("Unauthenticated Results", new JScrollPane(unauthTable));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, resultTabs, detailPanel);
-        splitPane.setResizeWeight(0.58);
-        splitPane.setDividerSize(4);
+        splitPane.setResizeWeight(0.55);
+        splitPane.setDividerSize(6);
         splitPane.setBorder(null);
 
         ConfigPanel configPanel = new ConfigPanel(replayer);
         JTabbedPane rootTabs = new JTabbedPane();
-        rootTabs.addTab("Request / Response", splitPane);
-        rootTabs.addTab("Configuration",      configPanel);
+        rootTabs.addTab("Results", splitPane);
+        rootTabs.addTab("Configuration", configPanel);
 
         add(toolbar,  BorderLayout.NORTH);
         add(rootTabs, BorderLayout.CENTER);
@@ -133,25 +168,84 @@ public class MainPanel extends JPanel {
         // Right-click using method references (satisfies ResultProvider functional interface)
         addContextMenu(modTable,    row -> modModel.getResult(row));
         addContextMenu(unauthTable, row -> unauthModel.getResult(row));
+
+        // Keep stats + filters fresh as results stream in
+        store.addTableModelListener(e -> { applyFilters(); refreshStats(); });
+        refreshStats();
     }
 
-    // Build a JTable with correct widths, sorter, and color renderer
+    // Toggle appearance reflects ON/OFF state clearly
+    private void styleToggle(JToggleButton btn, String base) {
+        boolean on = btn.isSelected();
+        btn.setText((on ? "● " : "○ ") + base);
+        btn.setForeground(on ? C_ON : C_OFF);
+        btn.setToolTipText(on ? base + " interception ON" : base + " interception OFF");
+    }
+
+    private void applyFilters() {
+        String text = filterField.getText() == null ? "" : filterField.getText().trim().toLowerCase();
+        boolean vulnOnly = vulnOnlyCheck.isSelected();
+        modSorter.setRowFilter(rowFilter(text, vulnOnly, false));
+        unauthSorter.setRowFilter(rowFilter(text, vulnOnly, true));
+    }
+
+    private RowFilter<AbstractTableModel, Integer> rowFilter(String text, boolean vulnOnly, boolean unauth) {
+        if (text.isEmpty() && !vulnOnly) return null;
+        return new RowFilter<>() {
+            @Override public boolean include(Entry<? extends AbstractTableModel, ? extends Integer> entry) {
+                TestResult r = store.getResult(entry.getIdentifier());
+                if (r == null) return true;
+                if (!text.isEmpty()) {
+                    String url = r.getUrl() == null ? "" : r.getUrl().toLowerCase();
+                    if (!url.contains(text)) return false;
+                }
+                if (vulnOnly) {
+                    VulnerabilityStatus s = unauth ? r.getUnauthVulnStatus() : r.getModVulnStatus();
+                    return s == VulnerabilityStatus.VULNERABLE;
+                }
+                return true;
+            }
+        };
+    }
+
+    private void refreshStats() {
+        int total = store.getResultCount();
+        int vuln = 0;
+        for (TestResult r : store.getAll()) {
+            if (r.getModVulnStatus() == VulnerabilityStatus.VULNERABLE
+                    || r.getUnauthVulnStatus() == VulnerabilityStatus.VULNERABLE) {
+                vuln++;
+            }
+        }
+        String base = total + (total == 1 ? " result" : " results");
+        if (vuln > 0) {
+            statsLabel.setText("<html>" + base
+                    + " · <font color='#C02A38'><b>" + vuln + " vulnerable</b></font>&nbsp;&nbsp;</html>");
+        } else {
+            statsLabel.setText(base + "  ");
+        }
+    }
+
+    // Build a JTable with correct widths and color renderer (sorter attached by caller)
     private <M extends AbstractTableModel> JTable buildTable(M model, boolean useUnauthColors) {
         JTable table = new JTable(model);
-        table.setRowHeight(22);
+        table.setRowHeight(24);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.getTableHeader().setReorderingAllowed(false);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 0));
         table.setFillsViewportHeight(true);
 
+        JTableHeader header = table.getTableHeader();
+        header.setReorderingAllowed(false);
+        header.setFont(header.getFont().deriveFont(Font.BOLD));
+
         // #, Method, URL, Orig.Status, Orig.Len, X.Status, X.Len, Result
-        int[] widths = {35, 60, 0, 80, 70, 80, 70, 170};
+        int[] widths = {36, 62, 0, 84, 74, 84, 74, 150};
         for (int i = 0; i < widths.length; i++) {
-            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i] > 0 ? widths[i] : 300);
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i] > 0 ? widths[i] : 320);
             if (i != 2) table.getColumnModel().getColumn(i).setMaxWidth(widths[i] > 0 ? widths[i] * 2 : Integer.MAX_VALUE);
         }
-
-        table.setRowSorter(new TableRowSorter<>(model));
 
         RowRenderer renderer = new RowRenderer(useUnauthColors);
         for (int i = 0; i < model.getColumnCount(); i++) {
@@ -247,10 +341,19 @@ public class MainPanel extends JPanel {
                 setForeground(table.getSelectionForeground());
             }
 
-            setHorizontalAlignment(
-                    column == 0 || column == 3 || column == 4 || column == 5 || column == 6
-                            ? SwingConstants.CENTER : SwingConstants.LEFT);
+            boolean numeric = column == 0 || column == 3 || column == 4 || column == 5 || column == 6;
+            setHorizontalAlignment(numeric ? SwingConstants.CENTER : SwingConstants.LEFT);
+            setBorder(new EmptyBorder(0, 8, 0, 8));
             return this;
         }
+    }
+
+    /** Convenience: implement all three DocumentListener methods with one lambda. */
+    @FunctionalInterface
+    private interface SimpleDocListener extends DocumentListener {
+        void update(DocumentEvent e);
+        @Override default void insertUpdate(DocumentEvent e)  { update(e); }
+        @Override default void removeUpdate(DocumentEvent e)  { update(e); }
+        @Override default void changedUpdate(DocumentEvent e) { update(e); }
     }
 }
