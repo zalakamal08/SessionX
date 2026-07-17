@@ -11,17 +11,15 @@ import com.burpext.sessionx.core.TestResult;
 import com.burpext.sessionx.core.TestResult.VulnerabilityStatus;
 
 import javax.swing.*;
-import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
 import java.awt.*;
 
 /**
  * Detail view for a single test result.
  *
  * Uses Burp's native Montoya HTTP editors (Pretty / Raw / Hex, syntax
- * highlighting, search, message inspector) instead of plain text areas, and
- * shows an at-a-glance comparison header across the three request variants.
+ * highlighting, search, message inspector). A slim one-line status strip
+ * shows the request identity and the Original → Modified → Unauth verdict.
  */
 public class ResultDetailPanel extends JPanel {
 
@@ -29,20 +27,13 @@ public class ResultDetailPanel extends JPanel {
     private static final Color C_VULN     = new Color(0xC0, 0x2A, 0x38);
     private static final Color C_ENFORCED = new Color(0x1E, 0x7E, 0x34);
     private static final Color C_INTEREST = new Color(0xB8, 0x6E, 0x00);
-    private static final Color C_PENDING  = new Color(0x6C, 0x75, 0x7D);
-    private static final Color C_CARD_BG   = new Color(0xF7, 0xF7, 0xF7);
-    private static final Color C_CARD_LINE = new Color(0xDD, 0xDD, 0xDD);
+    private static final Color C_MUTED    = new Color(0x6C, 0x75, 0x7D);
+    private static final Color C_METHOD   = new Color(0x2A, 0x5D, 0xB0);
 
     private final MontoyaApi api;
 
-    private final JLabel idLabel     = new JLabel(" ");
-    private final JLabel methodLabel = new JLabel(" ");
-    private final JLabel urlLabel    = new JLabel(" ");
-
-    // Comparison cards
-    private final Card origCard   = new Card("ORIGINAL");
-    private final Card modCard    = new Card("MODIFIED");
-    private final Card unauthCard = new Card("UNAUTH");
+    private final JLabel identity = new JLabel(" ");   // #id  METHOD  URL
+    private final JLabel summary  = new JLabel(" ");    // Orig 200 · Mod 200 · Unauth 401
 
     // Native Burp editors (read-only)
     private final HttpRequestEditor  origRequest;
@@ -65,7 +56,6 @@ public class ResultDetailPanel extends JPanel {
         unauthResponse = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
 
         setLayout(new BorderLayout());
-
         add(buildHeader(), BorderLayout.NORTH);
 
         tabs = new JTabbedPane(JTabbedPane.TOP);
@@ -82,14 +72,12 @@ public class ResultDetailPanel extends JPanel {
     public void show(TestResult result) {
         if (result == null) { showEmpty(); return; }
 
-        idLabel.setText("#" + result.getId());
-        methodLabel.setText(result.getMethod());
-        urlLabel.setText(result.getUrl());
-        urlLabel.setToolTipText(result.getUrl());
+        identity.setText(String.format(
+                "<html><b>#%d</b> &nbsp;<font color='#2A5DB0'>%s</font>&nbsp; %s</html>",
+                result.getId(), result.getMethod(), escape(result.getUrl())));
+        identity.setToolTipText(result.getUrl());
 
-        origCard.set(result.getOrigStatus(), result.getOrigLength(), null);
-        modCard.set(result.getModStatus(), result.getModLength(), result.getModVulnStatus());
-        unauthCard.set(result.getUnauthStatus(), result.getUnauthLength(), result.getUnauthVulnStatus());
+        summary.setText(buildSummary(result));
 
         setRequest(origRequest, result.getOrigRequestBytes());
         setResponse(origResponse, result.getOrigResponseBytes());
@@ -109,29 +97,15 @@ public class ResultDetailPanel extends JPanel {
     // ── UI construction ─────────────────────────────────────────────────────
 
     private JComponent buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(0, 6));
-        header.setBorder(new EmptyBorder(8, 10, 8, 10));
+        identity.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
 
-        // Title line: #id  METHOD  URL
-        idLabel.setFont(idLabel.getFont().deriveFont(Font.BOLD, 13f));
-        idLabel.setForeground(C_PENDING);
-        methodLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
-        methodLabel.setForeground(new Color(0x2A, 0x5D, 0xB0));
-        urlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        summary.setFont(summary.getFont().deriveFont(Font.BOLD, 11f));
+        summary.setHorizontalAlignment(SwingConstants.RIGHT);
 
-        JPanel title = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        title.add(idLabel);
-        title.add(methodLabel);
-        title.add(urlLabel);
-
-        // Comparison cards
-        JPanel cards = new JPanel(new GridLayout(1, 3, 8, 0));
-        cards.add(origCard);
-        cards.add(modCard);
-        cards.add(unauthCard);
-
-        header.add(title, BorderLayout.NORTH);
-        header.add(cards, BorderLayout.CENTER);
+        JPanel header = new JPanel(new BorderLayout(12, 0));
+        header.setBorder(new EmptyBorder(6, 10, 6, 10));
+        header.add(identity, BorderLayout.CENTER);
+        header.add(summary, BorderLayout.EAST);
         return header;
     }
 
@@ -147,7 +121,7 @@ public class ResultDetailPanel extends JPanel {
     private JPanel titled(String label, Component body) {
         JLabel header = new JLabel("  " + label);
         header.setFont(header.getFont().deriveFont(Font.BOLD, 11f));
-        header.setForeground(C_PENDING);
+        header.setForeground(C_MUTED);
         header.setBorder(new EmptyBorder(3, 2, 3, 2));
 
         JPanel panel = new JPanel(new BorderLayout());
@@ -159,19 +133,38 @@ public class ResultDetailPanel extends JPanel {
     // ── State helpers ───────────────────────────────────────────────────────
 
     private void showEmpty() {
-        idLabel.setText("—");
-        methodLabel.setText("");
-        urlLabel.setText("Select a row to inspect the request / response pair");
-        urlLabel.setToolTipText(null);
-        origCard.reset();
-        modCard.reset();
-        unauthCard.reset();
+        identity.setText("Select a row to inspect the request / response pair");
+        identity.setToolTipText(null);
+        summary.setText(" ");
         setRequest(origRequest, null);
         setResponse(origResponse, null);
         setRequest(modRequest, null);
         setResponse(modResponse, null);
         setRequest(unauthRequest, null);
         setResponse(unauthResponse, null);
+    }
+
+    /** One-line, color-coded summary: Orig 200 4682B · Mod 200 🔴 · Unauth 401 🟢 */
+    private String buildSummary(TestResult r) {
+        StringBuilder sb = new StringBuilder("<html>");
+        sb.append(String.format("<font color='#6C757D'>ORIG</font> %d&nbsp;·&nbsp;%dB",
+                r.getOrigStatus(), r.getOrigLength()));
+        sb.append("&nbsp;&nbsp;&nbsp;");
+        sb.append(part("MOD", r.getModStatus(), r.getModLength(), r.getModVulnStatus()));
+        sb.append("&nbsp;&nbsp;&nbsp;");
+        sb.append(part("UNAUTH", r.getUnauthStatus(), r.getUnauthLength(), r.getUnauthVulnStatus()));
+        sb.append("</html>");
+        return sb.toString();
+    }
+
+    private String part(String label, int status, int length, VulnerabilityStatus vuln) {
+        if (status == -1) {
+            return String.format("<font color='#6C757D'>%s replaying…</font>", label);
+        }
+        String hex = toHex(colorFor(vuln));
+        return String.format(
+                "<font color='#6C757D'>%s</font> <font color='%s'><b>%d</b>&nbsp;·&nbsp;%dB</font>",
+                label, hex, status, length);
     }
 
     private void setRequest(HttpRequestEditor editor, byte[] bytes) {
@@ -193,57 +186,21 @@ public class ResultDetailPanel extends JPanel {
     }
 
     private static Color colorFor(VulnerabilityStatus status) {
-        if (status == null) return C_PENDING;
+        if (status == null) return C_MUTED;
         return switch (status) {
             case VULNERABLE  -> C_VULN;
             case ENFORCED    -> C_ENFORCED;
             case INTERESTING -> C_INTEREST;
-            default          -> C_PENDING;
+            default          -> C_MUTED;
         };
     }
 
-    /** Compact card showing status code, byte length, and (optionally) the verdict. */
-    private static class Card extends JPanel {
-        private final JLabel value  = new JLabel("—", SwingConstants.CENTER);
-        private final JLabel verdict = new JLabel(" ", SwingConstants.CENTER);
+    private static String toHex(Color c) {
+        return String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
+    }
 
-        Card(String heading) {
-            setLayout(new BorderLayout());
-            setBackground(C_CARD_BG);
-            setBorder(new CompoundBorder(
-                    new LineBorder(C_CARD_LINE, 1, true),
-                    new EmptyBorder(5, 8, 5, 8)));
-
-            JLabel title = new JLabel(heading, SwingConstants.CENTER);
-            title.setFont(title.getFont().deriveFont(Font.BOLD, 10f));
-            title.setForeground(C_PENDING);
-
-            value.setFont(new Font(Font.MONOSPACED, Font.BOLD, 13));
-            verdict.setFont(verdict.getFont().deriveFont(Font.BOLD, 10f));
-
-            add(title, BorderLayout.NORTH);
-            add(value, BorderLayout.CENTER);
-            add(verdict, BorderLayout.SOUTH);
-        }
-
-        void set(int status, int length, VulnerabilityStatus vuln) {
-            if (status == -1) {
-                value.setText("replaying…");
-                value.setForeground(C_PENDING);
-                verdict.setText(" ");
-                return;
-            }
-            value.setText(status + "  ·  " + length + " B");
-            Color c = colorFor(vuln);
-            value.setForeground(vuln == null ? Color.DARK_GRAY : c);
-            verdict.setText(vuln == null ? "baseline" : vuln.toString());
-            verdict.setForeground(vuln == null ? C_PENDING : c);
-        }
-
-        void reset() {
-            value.setText("—");
-            value.setForeground(C_PENDING);
-            verdict.setText(" ");
-        }
+    private static String escape(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
