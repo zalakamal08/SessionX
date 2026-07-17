@@ -4,6 +4,7 @@ import com.burpext.sessionx.core.HeaderRule;
 import com.burpext.sessionx.core.HeaderRule.Mode;
 import com.burpext.sessionx.engine.RequestReplayer;
 import com.burpext.sessionx.io.ResultsExporter;
+import com.burpext.sessionx.io.SessionStore;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -23,11 +24,13 @@ public class ConfigPanel extends JPanel {
     private static final String[] TABLE_COLS = { "✔", "Header Name", "Mode", "Replacement Value" };
 
     private final RequestReplayer   replayer;
+    private final SessionStore      session;
     private final DefaultTableModel rulesModel;
     private final JTable            rulesTable;
 
-    public ConfigPanel(RequestReplayer replayer) {
+    public ConfigPanel(RequestReplayer replayer, SessionStore session) {
         this.replayer = replayer;
+        this.session  = session;
         setLayout(new BorderLayout(0, 10));
         setBorder(new EmptyBorder(14, 14, 14, 14));
 
@@ -125,12 +128,20 @@ public class ConfigPanel extends JPanel {
         add(rulesSection, BorderLayout.CENTER);
         add(south,        BorderLayout.SOUTH);
 
-        // Auto-sync on table edits
-        rulesModel.addTableModelListener(e -> syncRules());
-
-        // Default Authorization rule
-        rulesModel.addRow(new Object[]{ true, "Authorization", Mode.REPLACE, "" });
+        // Seed the table from any rules already loaded from the saved session,
+        // otherwise start with a sensible default Authorization rule.
+        List<HeaderRule> existing = replayer.getRules();
+        if (existing != null && !existing.isEmpty()) {
+            for (HeaderRule r : existing) {
+                rulesModel.addRow(new Object[]{ r.isEnabled(), r.getHeaderName(), r.getMode(), r.getReplacementValue() });
+            }
+        } else {
+            rulesModel.addRow(new Object[]{ true, "Authorization", Mode.REPLACE, "" });
+        }
         syncRules();
+
+        // Auto-sync (and persist) on table edits — added last so seeding above is silent
+        rulesModel.addTableModelListener(e -> syncRules());
     }
 
     // Export current rules to a file
@@ -199,5 +210,6 @@ public class ConfigPanel extends JPanel {
             rules.add(rule);
         }
         replayer.setRules(rules);
+        if (session != null) session.requestSave();
     }
 }

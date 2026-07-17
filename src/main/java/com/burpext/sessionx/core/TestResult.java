@@ -53,7 +53,18 @@ public class TestResult {
                       int origLength,
                       byte[] origRequestBytes,
                       byte[] origResponseBytes) {
-        this.id                = ++counter;
+        this(++counter, method, url, origStatus, origLength, origRequestBytes, origResponseBytes);
+    }
+
+    /** Private constructor used for both fresh rows and restored (persisted) rows. */
+    private TestResult(int id,
+                       String method,
+                       String url,
+                       int origStatus,
+                       int origLength,
+                       byte[] origRequestBytes,
+                       byte[] origResponseBytes) {
+        this.id                = id;
         this.method            = method;
         this.url               = url;
         this.origStatus        = origStatus;
@@ -108,6 +119,26 @@ public class TestResult {
     }
 
     public static void resetCounter() { counter = 0; }
+
+    /** Ensure the id counter is at least {@code minValue} (used after restoring persisted rows). */
+    public static void bumpCounterTo(int minValue) {
+        if (counter < minValue) counter = minValue;
+    }
+
+    /**
+     * Rebuild a TestResult from persisted state, preserving its original id and verdicts.
+     * A status of -1 means that stage was never completed and is left pending.
+     */
+    public static TestResult restore(int id, String method, String url,
+                                     int origStatus, int origLength, byte[] origReq, byte[] origResp,
+                                     int modStatus, int modLength, byte[] modReq, byte[] modResp,
+                                     int unauthStatus, int unauthLength, byte[] unauthReq, byte[] unauthResp) {
+        TestResult r = new TestResult(id, method, url, origStatus, origLength, origReq, origResp);
+        if (modStatus != -1)    r.setModifiedResult(modStatus, modLength, modReq, modResp);
+        if (unauthStatus != -1) r.setUnauthResult(unauthStatus, unauthLength, unauthReq, unauthResp);
+        bumpCounterTo(id);
+        return r;
+    }
 
     // ─── Getters ──────────────────────────────────────────────────────────────
 
